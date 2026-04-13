@@ -17,6 +17,10 @@
 !openvla/
 !openvla/vla-scripts/
 !openvla/vla-scripts/policy_server.py
+!SpatialVLA/
+!SpatialVLA/policy_server.py
+!RDT/
+!RDT/policy_server.py
 
 # Eval scripts (our harness)
 !LIBERO/
@@ -32,6 +36,9 @@
 !RoboTwin/script/
 !RoboTwin/script/run_eval_ws.py
 !RoboTwin/script/robotwin_run_utils.py
+!robocasa/
+!robocasa/scripts/
+!robocasa/scripts/run_eval.py
 
 # Benchmark launch scripts
 !logs/

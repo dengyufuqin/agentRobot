@@ -1,0 +1,59 @@
+# Ignore everything by default
+*
+
+# ===== Whitelist: our code =====
+!.gitignore
+!README.md
+
+# Agentic framework (our code)
+!agentic/
+!agentic/**
+
+# Policy server adapters (need to unignore parent dirs first)
+!lerobot/
+!lerobot/policy_server.py
+!octo/
+!octo/policy_server.py
+!openvla/
+!openvla/vla-scripts/
+!openvla/vla-scripts/policy_server.py
+
+# Eval scripts (our harness)
+!LIBERO/
+!LIBERO/scripts/
+!LIBERO/scripts/run_eval.py
+!ManiSkill/
+!ManiSkill/scripts/
+!ManiSkill/scripts/run_eval.py
+!ManiSkill/mani_skill/
+!ManiSkill/mani_skill/utils/
+!ManiSkill/mani_skill/utils/run_utils.py
+!RoboTwin/
+!RoboTwin/script/
+!RoboTwin/script/run_eval_ws.py
+!RoboTwin/script/robotwin_run_utils.py
+
+# Benchmark launch scripts
+!logs/
+!logs/_bench_*.sh
+
+# Re-ignore binary/cache files that might slip through
+**/.venv/
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/.git/
+**/.git_backup/
+**/.git_hidden/
+**/*.safetensors
+**/*.pt
+**/*.bin
+**/*.ckpt
+**/*.sif
+**/*.egg-info/
+**/node_modules/
+**/.cache/
+*.log
+*.out
+*.err
+.claude/

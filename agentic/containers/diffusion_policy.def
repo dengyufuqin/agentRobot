@@ -1,0 +1,38 @@
+Bootstrap: docker
+From: nvcr.io/nvidia/pytorch:24.01-py3
+
+%files
+    /mnt/vast/home/yd66byne/code/agentRobot/policy_websocket /opt/policy_websocket
+    /mnt/vast/home/yd66byne/code/agentRobot/diffusion_policy /opt/diffusion_policy
+
+%post
+    # policy_websocket deps
+    pip install --no-cache-dir websockets msgpack
+    pip install --no-cache-dir -e /opt/policy_websocket
+
+    # diffusion_policy deps
+    cd /opt/diffusion_policy
+    if [ -f pyproject.toml ]; then
+        pip install --no-cache-dir -e "." || pip install --no-cache-dir -e "." --no-deps
+    elif [ -f requirements.txt ]; then
+        pip install --no-cache-dir -r requirements.txt
+    elif [ -f setup.py ]; then
+        pip install --no-cache-dir -e .
+    fi
+    pip install --no-cache-dir hydra-core omegaconf diffusers
+
+%environment
+    export PYTHONPATH=/opt/policy_websocket/src:/opt/diffusion_policy
+
+%runscript
+    cd /opt/diffusion_policy
+    exec python3 policy_server.py "$@"
+
+%test
+    python3 -c "from policy_websocket import BasePolicy; print('policy_websocket OK')"
+    python3 -c "import torch; print(f'torch {torch.__version__} CUDA={torch.cuda.is_available()}')"
+
+%labels
+    Author RobotOpsAgent
+    Framework torch
+    Repo diffusion_policy

@@ -1,0 +1,22 @@
+Bootstrap: docker
+From: python:3.11-slim
+
+%files
+    /mnt/vast/home/yd66byne/code/agentRobot/policy_websocket /opt/policy_websocket
+
+%post
+    pip install --no-cache-dir websockets msgpack numpy
+    pip install --no-cache-dir -e /opt/policy_websocket
+
+%environment
+    export PYTHONPATH=/opt/policy_websocket/src
+
+%runscript
+    exec python3 "$@"
+
+%test
+    python3 -c "from policy_websocket import BasePolicy, WebsocketPolicyServer; print('policy_websocket OK')"
+
+%labels
+    Author RobotOpsAgent
+    Purpose Base container for policy servers

@@ -210,8 +210,8 @@ All evaluations run on NVIDIA H100 80GB HBM3 via SLURM. The **same `policy_webso
 |-----------|-----------|:------:|:------:|:----:|:---------:|:---:|
 | **OpenVLA-OFT** (per-suite ckpt) | openvla-7b-oft-finetuned-libero-{suite} | **94** | **82** | **86** | **58** | **80.0** |
 | **OpenVLA-OFT** (spatial ckpt only) | openvla-7b-oft-finetuned-libero-spatial | **100** | 0 | 6 | 8 | 28.5 |
-| **pi0** | lerobot/pi0_libero_spatial | 62 | **76** | **78** | 34 | **62.5** |
-| **SmolVLA** | HuggingFaceVLA/smolvla_libero | 20 | ... | ... | ... | ... |
+| **pi0** | lerobot/pi0_libero_finetuned_v044 | 62 | **76** | **78** | 34 | **62.5** |
+| **SmolVLA** | HuggingFaceVLA/smolvla_libero | 17 | ... | ... | ... | ... |
 | **pi0.5** | lerobot/pi05_libero_finetuned_v044 | 2 | 0 | 0 | 0 | 0.5 |
 | **Octo** | octo-base | 0 | 0 | 0 | 0 | 0.0 |
 | **SpatialVLA** | IPEC-COMMUNITY/spatialvla-4b-224-pt | ... | ... | ... | ... | ... |
@@ -222,20 +222,24 @@ All evaluations run on NVIDIA H100 80GB HBM3 via SLURM. The **same `policy_webso
 - **pi0 generalizes remarkably well** — trained on spatial only, achieves 76%/78% on object/goal (higher than spatial!)
 - **OpenVLA achieves near-perfect** 100% on its training domain (spatial), but 0% on others — strong overfitting
 - **OpenVLA per-suite checkpoints** are much stronger (80% avg) than a single checkpoint (28.5%)
-- pi0.5 and Octo show 0% — the LIBERO fine-tuned checkpoints may have training issues or incompatible preprocessing
+- **SmolVLA** shows moderate performance (~17% spatial) despite being a much smaller model
+- pi0.5 and Octo show ~0% — the LIBERO fine-tuned checkpoints may have training issues or incompatible preprocessing
 
 ### ManiSkill Benchmark (Success Rate %, 5 trials per task)
 
 | Algorithm | PickCube | StackCube | PushCube | PegInsertion | TurnFaucet | LiftPeg | PlugCharger |
 |-----------|:--------:|:---------:|:--------:|:------------:|:----------:|:-------:|:-----------:|
-| **OpenVLA-OFT** | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
-| **pi0** | — | — | — | — | 0 | — | — |
-| **pi0.5** | 0 | 0 | 0 | 0 | — | 0 | 0 |
+| **OpenVLA-OFT** (unified) | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| **OpenVLA-OFT** (spatial) | — | — | — | 0 | 0 | 0 | 0 |
+| **pi0** | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| **pi0.5** | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
 | **Octo** | 0 | 0 | 0 | 0 | 0 | 0 | 0 |
+| **SmolVLA** | ... | ... | ... | ... | ... | ... | ... |
 | **SpatialVLA** | ... | ... | ... | ... | ... | ... | ... |
 
 - All LIBERO-finetuned models get 0% on ManiSkill — **expected** (different embodiment, obs format, action space)
 - This validates our cross-benchmark infrastructure works correctly (pipeline runs, just no transfer)
+- SmolVLA and SpatialVLA evaluations in progress
 
 ### RoboCasa Kitchen Benchmark (6 tasks × 5 trials)
 
@@ -248,9 +252,9 @@ All evaluations run on NVIDIA H100 80GB HBM3 via SLURM. The **same `policy_webso
 | **Octo** | ... | ... | ... | ... | ... | ... |
 | **SpatialVLA** | ... | ... | ... | ... | ... | ... |
 
-*RoboCasa evaluation in progress — kitchen object assets downloading*
+*RoboCasa evaluation in progress — kitchen object assets downloaded, jobs running*
 
-**Key insight:** The evaluation infrastructure is **model-agnostic and benchmark-agnostic**. Adding a new algorithm or benchmark requires only a thin `BasePolicy` adapter (~50 lines) — the WebSocket bridge, SLURM orchestration, and eval harness are fully reusable. We tested **6 algorithms × 3 benchmarks = 18 combinations** through the same pipeline.
+**Key insight:** The evaluation infrastructure is **model-agnostic and benchmark-agnostic**. Adding a new algorithm or benchmark requires only a thin `BasePolicy` adapter (~50 lines) — the WebSocket bridge, SLURM orchestration, and eval harness are fully reusable. We tested **7 algorithms × 3 benchmarks = 21 combinations** through the same pipeline.
 
 ## Apptainer Containers
 

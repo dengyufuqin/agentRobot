@@ -4,7 +4,7 @@
 #SBATCH --gres=gpu:1
 #SBATCH --cpus-per-task=16
 #SBATCH --mem=100G
-#SBATCH --time=06:00:00
+#SBATCH --time=12:00:00
 #SBATCH --exclude=cn19,cn23
 #SBATCH --output=/mnt/vast/home/yd66byne/code/agentRobot/logs/eval-smolvla2-%j.log
 

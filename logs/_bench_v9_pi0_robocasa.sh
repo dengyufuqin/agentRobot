@@ -27,7 +27,7 @@ echo ""
 # Start pi0 server (via LeRobot)
 CUDA_VISIBLE_DEVICES=0 PYTHONPATH=$AGENTROBOT_ROOT/agentic/policy_websocket/src:$AGENTROBOT_ROOT/lerobot/src \
   $AGENTROBOT_ROOT/lerobot/.venv/bin/python3 $AGENTROBOT_ROOT/lerobot/policy_server.py \
-  --checkpoint lerobot/pi0_libero_spatial --port $PORT &
+  --checkpoint lerobot/pi0_libero_finetuned_v044 --port $PORT &
 PID=$!
 
 for i in $(seq 1 120); do

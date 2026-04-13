@@ -51,9 +51,10 @@ for TASK in PickCube-v1 StackCube-v1 PushCube-v1 PegInsertionSide-v1 TurnFaucet-
   echo "  EVAL: SpatialVLA on ManiSkill/$TASK ($(date))"
   echo "=========================================="
   PYTHONPATH=$AGENTROBOT_ROOT/agentic/policy_websocket/src:$AGENTROBOT_ROOT/ManiSkill \
-    $AGENTROBOT_ROOT/ManiSkill/.venv/bin/python3 -u $AGENTROBOT_ROOT/ManiSkill/mani_skill/utils/run_eval.py \
-    --policy_server_addr localhost:$PORT --policy spatialvla --task_name "$TASK" \
-    --num_trials 5 --no_save_video 2>&1
+    $AGENTROBOT_ROOT/ManiSkill/.venv/bin/python3 -u $AGENTROBOT_ROOT/ManiSkill/scripts/run_eval.py \
+    --policy_server_addr localhost:$PORT --policy spatialvla --env_id "$TASK" \
+    --num_trials 5 --no_save_video \
+    --log_dir $AGENTROBOT_ROOT/logs/eval_results 2>&1
   echo "  → SpatialVLA on ManiSkill/$TASK: exit $?"
 done
 

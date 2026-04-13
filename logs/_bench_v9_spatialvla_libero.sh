@@ -51,7 +51,7 @@ for SUITE in libero_spatial libero_object libero_goal libero_10; do
   echo "  EVAL: SpatialVLA on LIBERO/$SUITE ($(date))"
   echo "=========================================="
   PYTHONPATH=$AGENTROBOT_ROOT/agentic/policy_websocket/src:$AGENTROBOT_ROOT/LIBERO \
-    $AGENTROBOT_ROOT/LIBERO/.venv/bin/python3 -u $AGENTROBOT_ROOT/LIBERO/libero/libero/run_eval_ws.py \
+    $AGENTROBOT_ROOT/LIBERO/.venv/bin/python3 -u $AGENTROBOT_ROOT/LIBERO/scripts/run_eval.py \
     --policy_server_addr localhost:$PORT --policy spatialvla --task_suite_name "$SUITE" \
     --num_trials_per_task 5 --no_save_video \
     --log_dir $AGENTROBOT_ROOT/logs/eval_results 2>&1

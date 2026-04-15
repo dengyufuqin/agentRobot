@@ -176,7 +176,72 @@ POLICY_CONFIGS = {
         "arm_controller": "cartesian_pose",
         "policy_flag": "spatialvla",
     },
+    # OpenPI (JAX/orbax) — handles RLinf, kimtaey, SakikoTogawa-style finetuned
+    # pi0/pi0.5/pi0_fast checkpoints that use the openpi training pipeline.
+    "openpi": {
+        "server_python": str(AGENT_ROOT / "openpi" / ".venv" / "bin" / "python3"),
+        "server_script": str(AGENT_ROOT / "openpi" / "scripts" / "policy_server.py"),
+        "server_pythonpath": [
+            str(AGENT_ROOT / "agentic" / "policy_websocket" / "src"),
+            str(AGENT_ROOT / "openpi" / "src"),
+        ],
+        # --config is filled in by route_openpi_config() from the benchmark
+        "server_args": ["--config", "{openpi_config}", "--checkpoint", "{checkpoint}", "--port", "{port}"],
+        "env_vars": {},
+        "arm_controller": "joint_vel",
+        "policy_flag": "openpi",
+    },
 }
+
+
+def is_openpi_checkpoint(ckpt_path: str) -> bool:
+    """Detect OpenPI/orbax-trained checkpoint. Several layouts exist in the wild:
+    - Native orbax (kimtaey, RLinf RL): `_CHECKPOINT_METADATA` + `params/`
+    - HuggingFace-converted openpi (RLinf SFT): flat `model.safetensors` next
+      to `physical-intelligence/<task>/norm_stats.json`
+    - Subdir layouts: orbax under any child dir
+    """
+    p = Path(ckpt_path)
+    if not p.is_dir():
+        return False
+    if (p / "_CHECKPOINT_METADATA").is_file():
+        return True
+    if (p / "params").is_dir() and (p / "assets").is_dir():
+        return True
+    # HuggingFace mirror of openpi training: "physical-intelligence/" directory
+    # holds the per-task norm_stats.json that openpi expects.
+    if (p / "physical-intelligence").is_dir():
+        return True
+    # Some uploads put it under a subdir
+    for sub in p.iterdir():
+        if sub.is_dir() and ((sub / "_CHECKPOINT_METADATA").is_file() or (sub / "params").is_dir()):
+            return True
+    return False
+
+
+def route_openpi_config(benchmark_name: str, ckpt_path: str | None = None) -> str:
+    """Pick the closest stock openpi config for a given benchmark. The training
+    teams use custom configs that aren't in stock openpi, but the model arch is
+    fully specified by the weights — a matching stock config (action_dim,
+    horizon, robot type) is enough for inference.
+
+    Mapping rules:
+      libero    → pi0_fast_libero  (Franka, 7 DoF)
+      maniskill → pi0_fast_libero  (Franka, 7 DoF — closest stock match)
+      robocasa  → pi0_fast_libero  (PandaMobile, 7 DoF arm)
+      droid     → pi0_fast_droid   (8 DoF including gripper)
+      calvin    → pi0_fast_libero  (Franka, 7 DoF)
+    Falls back to pi0_fast_libero (most flexible 7-DoF Franka config).
+    """
+    bm = benchmark_name.split(":")[0].lower()
+    table = {
+        "libero":    "pi0_fast_libero",
+        "maniskill": "pi0_fast_libero",
+        "robocasa":  "pi0_fast_libero",
+        "droid":     "pi0_fast_droid",
+        "calvin":    "pi0_fast_libero",
+    }
+    return table.get(bm, "pi0_fast_libero")
 
 # ---------------------------------------------------------------------------
 # Known benchmarks — maps name → eval client + task_id + defaults
@@ -802,6 +867,25 @@ def main():
             else:
                 print("ERROR: No --checkpoint, no registry match, no HF variants, no fallback.")
                 sys.exit(1)
+
+    # Auto-route to OpenPI server if checkpoint is in JAX/orbax format. RLinf,
+    # kimtaey, SakikoTogawa community checkpoints all use this — they can't be
+    # loaded by the lerobot/pi0 PyTorch server. The openpi/scripts/policy_server.py
+    # handles them. We pick the closest stock --config based on the benchmark.
+    if (args.policy in ("pi0", "pi0.5", "pi0_fast", "lerobot")
+            and args.checkpoint
+            and not args.checkpoint.startswith(("hf://", "lerobot/"))
+            and is_openpi_checkpoint(args.checkpoint)):
+        openpi_cfg_name = route_openpi_config(args.benchmark, args.checkpoint)
+        print(f"  [route] Detected OpenPI/orbax format → switching to openpi server")
+        print(f"          --config {openpi_cfg_name} (matched to '{args.benchmark}')")
+        args.policy = "openpi"
+        policy_cfg = resolve_policy("openpi")
+        # Substitute openpi_config into server_args template
+        policy_cfg = dict(policy_cfg)
+        policy_cfg["server_args"] = [
+            a.replace("{openpi_config}", openpi_cfg_name) for a in policy_cfg["server_args"]
+        ]
 
     print(f"\n=== Benchmark Run ===")
     print(f"Policy:     {args.policy}")

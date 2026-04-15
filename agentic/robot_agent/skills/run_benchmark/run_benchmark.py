@@ -750,25 +750,58 @@ def main():
                 policy_cfg["server_args"].extend(["--unnorm_key", args.unnorm_key])
                 print(f"  Added --unnorm_key {args.unnorm_key}")
 
-    # Final checkpoint check — fallback to a default per policy for cross-domain
+    # Final checkpoint resolution. Three layers:
+    #   1. Registry hit (handled above).
+    #   2. HF variant search for "{policy} {benchmark}" — auto-pick if exactly
+    #      one finetuned variant; exit 10 if multiple (agent prompts user).
+    #   3. Cross-domain fallback to a known LIBERO ckpt — only when search returns nothing.
     if not args.checkpoint:
-        _DEFAULT_CHECKPOINTS = {
-            "openvla": "moojink/openvla-7b-oft-finetuned-libero-spatial",
-            "pi0": "lerobot/pi0_libero_finetuned",
-            "pi0.5": "lerobot/pi05_libero_finetuned",
-            "smolvla": "lerobot/smolvla_base",
-            "spatialvla": "IPEC-COMMUNITY/spatialvla-4b-224-pt",
-        }
-        resolved = resolve_policy(args.policy)
-        policy_key = args.policy
-        fallback = _DEFAULT_CHECKPOINTS.get(policy_key)
-        if fallback:
-            args.checkpoint = fallback
-            print(f"  Fallback checkpoint (no registry match): {args.checkpoint}")
+        # Layer 2: variant search via download_model
+        bench_short = args.benchmark.split(":")[0]  # "maniskill:PickCube-v1" -> "maniskill"
+        query = f"{args.policy} {bench_short}"
+        print(f"  No checkpoint provided — searching HF for '{query}' ...")
+        DM = Path(__file__).parent.parent / "download_model" / "download_model.py"
+        proc = subprocess.run(
+            [sys.executable, str(DM), "--repo-id", query, "--list-only", "true"],
+            capture_output=True, text=True, timeout=60,
+        )
+        try:
+            variants = json.loads(proc.stdout[proc.stdout.find("{"):proc.stdout.rfind("}")+1])
+            cands = variants.get("variants", [])
+        except Exception:
+            cands = []
+        # Mirror download_model's broadened "trained on target" detector
+        _FT_PAT = re.compile(r"finetune|finetuned|\bft\b|\bsft\b|lora|\bdpo\b|grpo|rlhf|pretrain", re.IGNORECASE)
+        ft = [c for c in cands if _FT_PAT.search(c)]
+        if len(ft) == 1:
+            args.checkpoint = ft[0]
+            print(f"  Auto-picked single finetuned variant: {args.checkpoint}")
+        elif len(ft) > 1:
+            # Multiple finetuned candidates — emit exit 10 so agent.py prompts user
+            print(json.dumps({
+                "search_term": query,
+                "variants": ft + [c for c in cands if c not in ft][:10],
+                "preferred": "(multiple finetuned matches — pick one)",
+            }, indent=2))
+            print(f"\n  Multiple finetuned matches for {query} — pass --checkpoint <repo_id> or let the agent disambiguate.")
+            sys.exit(10)
         else:
-            print("ERROR: No --checkpoint provided and registry has no checkpoint for this combo.")
-            print("  Provide --checkpoint explicitly or check eval_registry entries.")
-            sys.exit(1)
+            # Layer 3: cross-domain fallback
+            _DEFAULT_CHECKPOINTS = {
+                "openvla": "moojink/openvla-7b-oft-finetuned-libero-spatial",
+                "pi0":     "lerobot/pi0_libero_finetuned",
+                "pi0.5":   "lerobot/pi05_libero_finetuned",
+                "smolvla": "lerobot/smolvla_base",
+                "spatialvla": "IPEC-COMMUNITY/spatialvla-4b-224-pt",
+            }
+            fallback = _DEFAULT_CHECKPOINTS.get(args.policy)
+            if fallback:
+                args.checkpoint = fallback
+                print(f"  No finetuned variant found — falling back to LIBERO ckpt: {args.checkpoint}")
+                print(f"  WARNING: This is cross-domain — expect ~0% on {bench_short}.")
+            else:
+                print("ERROR: No --checkpoint, no registry match, no HF variants, no fallback.")
+                sys.exit(1)
 
     print(f"\n=== Benchmark Run ===")
     print(f"Policy:     {args.policy}")

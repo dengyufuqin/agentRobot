@@ -86,7 +86,10 @@ def main() -> int:
         return 0
 
     if len(candidates) > 1:
-        ft = [c for c in candidates if re.search(r"finetune", c, re.IGNORECASE)]
+        # Trained-on-target indicators that show up in HF repo names.
+        # finetune / ft / sft (supervised finetuning) / lora / dpo / rl(hf) / grpo / pretrain
+        FT_PAT = re.compile(r"finetune|finetuned|\bft\b|\bsft\b|lora|\bdpo\b|grpo|rlhf|pretrain", re.IGNORECASE)
+        ft = [c for c in candidates if FT_PAT.search(c)]
         base = [c for c in candidates if c not in ft]
         if prefer_ft and ft:
             # If exactly one finetuned match, use it; else ambiguous

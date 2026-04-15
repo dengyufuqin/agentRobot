@@ -24,13 +24,25 @@ Key paths are set via `AGENTROBOT_ROOT` environment variable (auto-detected at s
 ## One-Sentence Deployment
 The core capability: user says ONE sentence, you handle EVERYTHING automatically.
 
-### Example 1: Run a benchmark
+### Example 1: Run a benchmark — adaptive checkpoint resolution
+```
+User: "用 pi0 跑 ManiSkill PickCube"
+-> run_benchmark(policy="pi0", benchmark="maniskill:PickCube-v1")
+   ├─ Layer 1: registry hit?  YES → use registry's checkpoint (zero friction)
+   │                          NO  → fall through
+   ├─ Layer 2: HF variant search "pi0 maniskill"
+   │           1 finetuned match → auto-pick
+   │          >1 finetuned       → exit 10 → agent prompts user (TTY) or LLM picks
+   │           0 matches         → fall through
+   └─ Layer 3: cross-domain LIBERO ckpt + WARNING (expect ~0%)
+```
+**The same `run_benchmark` call adapts to the situation** — the user doesn't have
+to know whether the registry has the combo. If the agent is in TTY, exit 10
+auto-prompts the user; otherwise the LLM picks.
+
 ```
 User: "用openvla跑LIBERO-spatial评测"
--> check_cluster_status() -> find available GPU (local or cluster node)
--> run_benchmark(policy="openvla", checkpoint="moojink/openvla-7b-oft-finetuned-libero-spatial",
-                 benchmark="libero_spatial", num_trials=5)
--> Report success rate
+-> run_benchmark(policy="openvla", benchmark="libero_spatial")  # registry hit, auto-resolves
 ```
 
 ### Example 2: Integrate a new repo and evaluate

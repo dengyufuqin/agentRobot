@@ -1,6 +1,6 @@
 ---
 name: analyze_repo
-description: "Clone a GitHub repo and analyze its code structure for robot policy integration. Finds model loading, inference entry points, observation/action spaces, and dependencies."
+description: "Analyze a repo's code structure for robot policy integration. Accepts a GitHub URL (clones it) OR a local path / file:// URL (skips clone). Finds model loading, inference entry points, observation/action spaces, and dependencies."
 version: 1.0.0
 category: meta
 parameters:
@@ -23,20 +23,29 @@ command_template: |
   REPO_URL="{repo_url}"
   BRANCH="{branch}"
   BASE_DIR=${AGENTROBOT_ROOT:-.}
-  
-  # Extract repo name from URL
-  REPO_NAME=$(basename "$REPO_URL" .git)
-  TARGET="{target_dir}"
-  if [ -z "$TARGET" ]; then
-    TARGET="$BASE_DIR/$REPO_NAME"
-  fi
-  
-  echo "=== Step 1: Clone Repository ==="
-  if [ -d "$TARGET" ]; then
-    echo "Repository already exists at $TARGET, pulling latest..."
-    cd "$TARGET" && git pull 2>&1 | tail -3
+
+  # Detect local path: strip file:// prefix, or accept absolute/relative paths
+  LOCAL_PATH="${REPO_URL#file://}"
+  if [ -d "$LOCAL_PATH" ]; then
+    TARGET="$LOCAL_PATH"
+    REPO_NAME=$(basename "$TARGET")
+    echo "=== Step 1: Local repo detected — skipping clone ==="
+    echo "Using existing directory: $TARGET"
   else
-    git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$TARGET" 2>&1
+    # Extract repo name from URL
+    REPO_NAME=$(basename "$REPO_URL" .git)
+    TARGET="{target_dir}"
+    if [ -z "$TARGET" ]; then
+      TARGET="$BASE_DIR/$REPO_NAME"
+    fi
+
+    echo "=== Step 1: Clone Repository ==="
+    if [ -d "$TARGET" ]; then
+      echo "Repository already exists at $TARGET, pulling latest..."
+      cd "$TARGET" && git pull 2>&1 | tail -3
+    else
+      git clone --depth 1 --branch "$BRANCH" "$REPO_URL" "$TARGET" 2>&1
+    fi
   fi
   
   echo ""

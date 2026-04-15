@@ -10,11 +10,11 @@ parameters:
     required: true
   checkpoint:
     type: string
-    description: "Model checkpoint path or HuggingFace model ID"
-    required: true
+    description: "Model checkpoint path or HuggingFace model ID. Auto-resolved from eval_registry when omitted."
+    required: false
   benchmark:
     type: string
-    description: "Benchmark name. LIBERO: libero_spatial, libero_object, libero_goal, libero_10, libero_90. ManiSkill: maniskill:PickCube-v1, maniskill:StackCube-v1, etc. RoboTwin: robotwin:beat_block_hammer, robotwin:open_laptop, etc. Use <platform>:<task_id> for any task."
+    description: "Benchmark name. LIBERO: libero_spatial, libero_object, libero_goal, libero_10, libero_90. ManiSkill: maniskill:PickCube-v1, maniskill:StackCube-v1, etc. RoboTwin: robotwin:beat_block_hammer, robotwin:open_laptop, etc. RoboCasa: robocasa:PnPCounterToCab, robocasa:OpenSingleDoor, robocasa:TurnOnStove, etc. Use <platform>:<task_id> for any task."
     required: true
   num_trials:
     type: integer
@@ -36,6 +36,10 @@ parameters:
     type: string
     description: "Connect to existing server (host:port) instead of starting a new one."
     required: false
+  allow_cross_domain:
+    type: string
+    description: "If 'true', allow cross-domain evaluations that the preflight check would normally block (expect ~0% success)."
+    default: "false"
   submit:
     type: string
     description: "If 'true', submit as SLURM job (recommended for HPC). Server+eval run together on GPU node."
@@ -46,7 +50,7 @@ timeout: 120
 command_template: |
   python3 $AGENTROBOT_ROOT/agentic/robot_agent/skills/run_benchmark/run_benchmark.py \
     --policy "{policy}" \
-    --checkpoint "{checkpoint}" \
+    $([ -n "{checkpoint}" ] && echo "--checkpoint {checkpoint}") \
     --benchmark "{benchmark}" \
     --num_trials {num_trials} \
     --port {port} \
@@ -54,6 +58,7 @@ command_template: |
     $([ -n "{node}" ] && echo "--node {node}") \
     $([ -n "{server_addr}" ] && echo "--server_addr {server_addr}") \
     $([ "{submit}" = "true" ] && echo "--submit") \
+    $([ "{allow_cross_domain}" = "true" ] && echo "--allow_cross_domain") \
     --log_dir $AGENTROBOT_ROOT/logs/eval_results
 ---
 
@@ -114,6 +119,23 @@ run_benchmark(policy="openvla", benchmark="robotwin:open_laptop", submit="false"
 
 ## Supported Policies
 
-- `openvla` / `openvla-oft` — OpenVLA 7B
+- `openvla` / `openvla-oft` — OpenVLA 7B (per-suite checkpoints auto-resolved)
+- `pi0` — Physical Intelligence pi0 (via LeRobot)
+- `pi0.5` — Physical Intelligence pi0.5 (via LeRobot)
+- `smolvla` — SmolVLA (via LeRobot)
+- `lerobot` — Generic LeRobot (auto-detects model from checkpoint)
 - `diffusion_policy` — Diffusion Policy
 - Any repo with `policy_server.yaml` is auto-discovered
+
+## One-Sentence Deployment
+
+Checkpoint, unnorm_key, and server_args are auto-resolved from the eval_registry:
+
+```
+run_benchmark(policy="openvla", benchmark="libero_spatial")
+run_benchmark(policy="pi0.5", benchmark="libero_10")
+run_benchmark(policy="pi0", benchmark="libero_goal", num_trials=10)
+```
+
+The preflight system blocks known-bad combos (NEEDS_FINETUNE, CROSS_DOMAIN) by default.
+Use `allow_cross_domain=true` to override for baseline measurements.

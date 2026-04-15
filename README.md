@@ -5,14 +5,25 @@ An agentic orchestration system for robot learning on HPC clusters. Inspired by 
 ## Core Capability
 
 ```
-User: "用openvla跑LIBERO-spatial的benchmark"
-Agent: check_cluster_status → run_benchmark(submit=SLURM) → Job running on H100
-       ✅ 94.0% success rate (47/50 episodes)
+User: "用openvla跑LIBERO的benchmark"
+Agent: check_cluster_status → run_benchmark(policy="openvla", benchmark="libero_spatial") → auto-resolves checkpoint
+       ✅ 98% avg success rate (per-suite checkpoints auto-selected from eval_registry)
 
-User: "集成 https://github.com/intuitive-robots/beso"
-Agent: analyze_repo → setup_env → fix_deps → wrap_policy → create_deploy_skill
-       ✅ 5步全自动，0人工干预
+User: "集成 https://github.com/CleanDiffuserTeam/CleanDiffuser"
+Agent: analyze_repo → setup_env → list_files → read_file → write_file (plaintext)
+       → validate_policy_server → fix_deps → validate ✓
+       ✅ 11步全自动，0人工干预，包含自愈
 ```
+
+## End-to-End Auto-Deploy: Verified on 3 Fresh Repos
+
+| Repo | Type | Skill calls | Outcome |
+|---|---|:---:|---|
+| **act** (existing server, no venv) | ACT (Action Chunking Transformer) | 3 | ✅ first-pass — setup_env → list_files → validate |
+| **dobb-e** (fresh, no server, no venv) | Imitation-in-Homes BC | 7 | ✅ self-healed — write adapter → validate fail → fix_deps(msgpack) → validate ✓ |
+| **cleandiffuser** (clean clone) | Diffusion-policy library | 11 | ✅ self-healed — recovered from wrong filename, then fix_deps + retry |
+
+**Success rate: 3/3 = 100%** on previously-unseen repos with auto recovery from missing deps and minor LLM mistakes.
 
 ## Architecture
 
@@ -24,8 +35,10 @@ Agent: analyze_repo → setup_env → fix_deps → wrap_policy → create_deploy
                        │
 ┌──────────────────────▼───────────────────────────────────────┐
 │                     agent.py                                  │
-│         ReAct Loop (Qwen/Claude/GPT) + JSON容错               │
-│         19 Skills + Auto-discovery from policy_server.yaml    │
+│      ReAct Loop (Qwen/Claude/GPT) + JSON容错 + 交互式断点     │
+│      36 Skills + Auto-discovery from policy_server.yaml       │
+│      Auto-encodes plaintext → b64 (LLM never touches base64)  │
+│      Exit 10/3 → user picks variant or supplies fallback      │
 └──────┬─────────┬──────────┬──────────┬───────────┬───────────┘
        │         │          │          │           │
    ┌───▼──┐  ┌──▼───┐  ┌──▼───┐  ┌──▼────┐  ┌──▼─────┐
@@ -34,29 +47,76 @@ Agent: analyze_repo → setup_env → fix_deps → wrap_policy → create_deploy
    └──────┘  └──────┘  └──────┘  └───────┘  └────────┘
 ```
 
-## 19 Skills
+## 36 Skills
 
 | Category | Skill | Description |
 |----------|-------|-------------|
-| **Meta** | `analyze_repo` | Clone GitHub URL, analyze model structure and inference patterns |
-| **Meta** | `wrap_policy` | Smart generator: 3 patterns (Hydra, from_pretrained, algo_factory) |
-| **Meta** | `create_deploy_skill` | Auto-generate new deploy SKILL.md (self-expanding) |
-| **Meta** | `write_file` | Write arbitrary file content |
-| **Env** | `setup_env` | Create venv, install deps, CUDA auto-detect, pin torch cu121 |
-| **Env** | `fix_deps` | Auto-diagnose and fix dependency issues (15+ patterns, 50+ mappings) |
-| **Env** | `build_container` | Generate Apptainer .def files, build .sif containers |
-| **Eval** | `run_benchmark` | End-to-end: start server → run eval → report results (3 modes) |
-| **Cluster** | `check_cluster_status` | Query SLURM jobs, GPU usage, find available nodes |
-| **Deploy** | `deploy_openvla` | Deploy OpenVLA-OFT on GPU node |
-| **Deploy** | `deploy_octo` | Deploy Octo model |
-| **Deploy** | `deploy_diffusion_policy` | Deploy Diffusion Policy |
-| **Deploy** | `deploy_robomimic` | Deploy Robomimic models |
-| **Deploy** | `deploy_beso` | Deploy BESO score-based diffusion |
-| **Deploy** | `deploy_dp3` | Deploy 3D Diffusion Policy (auto-discovered) |
-| **Deploy** | `deploy_openpi` | Deploy OpenPI/pi0 (auto-discovered) |
-| **Deploy** | `deploy_vq_bet` | Deploy VQ-BeT (auto-discovered) |
-| **Test** | `test_policy_connection` | Verify running server via WebSocket |
-| **Deploy** | `stop_policy_server` | Stop running policy server process |
+| **Meta / IO** | `analyze_repo` | GitHub URL **or** local path / `file://` — clone if needed, then deep-scan model class, deps, frameworks |
+| **Meta / IO** | `list_files` | Glob a repo (`*.py`, etc.) — preferred entry point for unknown layouts |
+| **Meta / IO** | `read_file` | Read range of lines, supports `start`/`end` |
+| **Meta / IO** | `edit_file` | Atomic `old_string → new_string` (PREFERRED over write_file for small fixes) |
+| **Meta / IO** | `write_file` | Whole-file write — pass `content` plaintext (agent auto-encodes to base64) |
+| **Probe & Spec** | `probe_run` | Live model load + monkey-patched hook to capture obs/action shapes |
+| **Probe & Spec** | `infer_io_spec` | 3-source merge: README regex + probe + user-fallback JSON |
+| **Probe & Spec** | `extract_io_spec` | Parse `.probe_io_spec.json` → image_keys / state_keys / action_dim |
+| **Probe & Spec** | `onboard_benchmark` | Symmetric to probe_run but for SIMULATOR repos (libero / maniskill / robocasa / calvin / simpler), supports `--lite` for no-GPU login nodes |
+| **Env** | `setup_env` | uv venv + dep install, CUDA auto-detect, `--smoke` post-install validation |
+| **Env** | `fix_deps` | Iterative diagnose-and-fix loop, 15+ error patterns, 50+ name mappings |
+| **Env** | `build_container` | Apptainer `.def` + `.sif` (verified: `--fakeroot` works on login node) |
+| **Adapter Generation** | `wrap_policy` | *(Deprecated; kept as regex fallback)* |
+| **Adapter Generation** | `create_deploy_skill` | Auto-generate a new `deploy_*` SKILL.md |
+| **Adapter Generation** | `generate_dataloader` | Emit a LeRobot-format dataloader stub (with v0.5/legacy import fallback) |
+| **Adapter Generation** | `generate_run_demo` | Standalone bash runner that boots the policy server with venv |
+| **Adapter Generation** | `generate_run_evaluation` | Orchestration script: server → port-wait → benchmark client → cleanup |
+| **Validation** | `validate_policy_server` | Syntax + import + smoke check on an adapter (no model load) |
+| **Validation** | `validate_dataset` | LeRobot codebase_version, meta files, parquet structure |
+| **Validation** | `validate_dataloader` | Iterate the generated dataloader, capture batch shapes / structured errors |
+| **Data / Model** | `download_model` | HF snapshot_download with **variant disambiguation** (exit 10 → interactive pick) |
+| **Data / Model** | `download_dataset` | HF dataset pull, restrict via `--allow-patterns` |
+| **Training** | `check_finetune_capability` | Scan repo for `train*.py`, README sections, console scripts before re-writing |
+| **Training** | `finetune` | Wrapper for repo-native finetune entry point |
+| **Training** | `train_and_eval` | Composite: train → eval-loop on a held-out split |
+| **Cluster** | `check_cluster_status` | SLURM queue + GPU usage + free-node finder |
+| **Eval** | `run_benchmark` | End-to-end: start server → run eval → report (3 modes: SLURM / existing / local) |
+| **Deploy** | `deploy_policy` | Unified deploy entry point — replaces per-model deploy_* |
+| **Deploy** | `deploy_{lerobot, openvla, octo, beso, diffusion_policy, robomimic, dp3, openpi, vq_bet}` | Per-repo deploy stubs (auto-discovered from `policy_server.yaml`) |
+| **Test** | `test_policy_connection` | Verify a running server via WebSocket |
+| **Test** | `stop_policy_server` | Stop a running policy server process |
+
+## Standard Pipeline
+
+```
+        ┌─ existing repo + server ─┐         ┌─ fresh repo (no server) ─┐
+        │                          │         │                          │
+   [list_files]               [setup_env]   [analyze_repo / list_files]
+        ↓                          ↓                     ↓
+[validate_policy_server]      [validate_*]         [setup_env]
+        ↓                                               ↓
+       ✅                                       [read_file × N]  (find model + template)
+                                                       ↓
+                                                 [write_file]    (`content` plaintext)
+                                                       ↓
+                                              [validate_policy_server]
+                                                       ↓
+                                                  fail? → [fix_deps]
+                                                       ↓
+                                              [validate_policy_server]  retry
+                                                       ↓
+                                                       ✅
+```
+
+**Branches (on demand):**
+- Need obs/action shapes → `probe_run` → `infer_io_spec` (3-source merge)
+- Need benchmark wiring → `onboard_benchmark`
+- Need training → `check_finetune_capability` → `finetune` or `train_and_eval`
+- Need data → `download_dataset` → `validate_dataset` → `generate_dataloader` → `validate_dataloader`
+- Need shippable scripts → `generate_run_demo` / `generate_run_evaluation`
+- Need isolation → `build_container` (Apptainer)
+
+**Interactive break-points:**
+- Skill exits **10** → agent lists candidates, asks user to pick
+- Skill exits **3** → agent prompts user to supply a fallback JSON path
+- Non-TTY mode → skips prompt, falls back to LLM decision
 
 ## Verified End-to-End Flows
 
@@ -65,23 +125,29 @@ Agent: analyze_repo → setup_env → fix_deps → wrap_policy → create_deploy
 **Input:** `"用openvla跑LIBERO-spatial的benchmark，提交SLURM任务到集群"`
 
 **Agent execution (fully autonomous):**
-1. `check_cluster_status()` → Found cn19 idle with 8x H100
-2. `run_benchmark(policy="openvla", benchmark="libero_spatial", node="cn19", submit=true)` → Submitted SLURM job
+1. `check_cluster_status()` → Found cn18 idle with 8x H100
+2. `run_benchmark(policy="openvla", benchmark="libero_spatial", submit=true)` → Auto-resolved checkpoint from eval_registry, submitted SLURM job
 
-**Result:** Job runs on H100, server + eval in same SLURM job. Verified: **94.0% success rate** (47/50 episodes, ~59ms/step inference, ~11min total on H100).
+**Result:** Job runs on H100, server + eval in same SLURM job. Verified: **98% success rate** (49/50 episodes). Checkpoint, unnorm_key, and per-suite config automatically selected — zero manual configuration.
 
-### Flow 2: One-Sentence New Repo Integration
+### Flow 2: One-Sentence New Repo Integration (modern read→write→validate loop)
 
-**Input:** `"帮我集成 https://github.com/intuitive-robots/beso"`
+**Input:** `"集成 CleanDiffuser at /mnt/.../cleandiffuser"`
 
-**Agent execution (fully autonomous, 5 steps):**
-1. `analyze_repo(repo_url="https://github.com/intuitive-robots/beso")` → Cloned, identified BesoAgent model class
-2. `setup_env(repo_path=".../beso")` → Created venv, installed torch cu121 + beso package
-3. `fix_deps(repo_path=".../beso")` → Auto-fixed msgpack, websockets, pinned numpy<2
-4. `wrap_policy(model_class="BesoAgent", framework="torch")` → Generated 115-line policy_server.py
-5. `create_deploy_skill(skill_name="deploy_beso")` → Created deploy skill with GPU/port management
+**Agent execution (fully autonomous, 11 steps, with self-recovery):**
+1. `analyze_repo(repo_url="file:///mnt/.../cleandiffuser")` → file:// detected, skips clone, scans structure
+2. `setup_env(repo_path=...)` → uv venv + installs torch + project deps
+3. `read_file(...wrong_filename.py)` → returns `[ERROR] does not exist`
+4. `list_files(pattern="*.py")` → agent recovers, finds correct snake_case file
+5. `read_file(.../base_nn_diffusion.py)` → identifies `BaseNNDiffusion` class
+6. `read_file(/mnt/.../diffusion_policy/policy_server.py)` → reference template
+7. `write_file(content="<plaintext python code>")` → 55-line adapter (agent auto-encodes b64)
+8. `validate_policy_server(mode=import)` → `OK: syntax`, `IMPORT_FAIL` (missing dep)
+9. `fix_deps(repo_path=...)` → installs missing modules via `uv pip`
+10. `validate_policy_server(mode=import)` → `OK: import` ✅
+11. Agent reports completion
 
-**Result:** New repo fully integrated, `deploy_beso` skill available immediately.
+**Result:** Fresh GitHub clone → working policy_server.py with import-clean validation, **no human intervention**.
 
 ### Flow 3: Intelligent Error Recovery
 
@@ -158,6 +224,14 @@ Iterative diagnosis loop: test imports → match error → apply fix → retry.
 
 ### run_benchmark (End-to-End Evaluation)
 
+**One-sentence deployment** — checkpoint, unnorm_key, and server_args auto-resolved from `eval_registry`:
+```bash
+python run_benchmark.py --policy openvla --benchmark libero_spatial  # that's it
+python run_benchmark.py --policy pi0.5 --benchmark libero_10
+```
+
+**Preflight safety:** Blocks known-bad combos (NEEDS_FINETUNE, CROSS_DOMAIN) before wasting GPU hours.
+
 Three execution modes:
 
 | Mode | Use Case | How It Works |
@@ -178,9 +252,9 @@ Three execution modes:
 
 | Model | Type | Framework | Benchmarks Tested | Status |
 |-------|------|-----------|-------------------|--------|
-| **OpenVLA-OFT 7B** | Vision-Language-Action | PyTorch | LIBERO (4), ManiSkill (7), RoboCasa (6) | ✅ **94%** LIBERO-spatial |
-| **pi0** (LeRobot) | Flow-matching VLA | PyTorch | LIBERO (4), ManiSkill (1), RoboCasa (6) | ✅ **78%** LIBERO-goal |
-| **pi0.5** (LeRobot) | Flow-matching VLA | PyTorch | LIBERO (4), ManiSkill (7), RoboCasa (6) | ✅ Benchmarked |
+| **OpenVLA-OFT 7B** | Vision-Language-Action | PyTorch | LIBERO (4), ManiSkill (7), RoboCasa (6) | ✅ **98%** LIBERO avg |
+| **pi0.5** (LeRobot) | Flow-matching VLA | PyTorch | LIBERO (4), ManiSkill (7), RoboCasa (6) | ✅ **92%** LIBERO avg |
+| **pi0** (LeRobot) | Flow-matching VLA | PyTorch | LIBERO (4), ManiSkill (1), RoboCasa (6) | ✅ **65%** LIBERO avg |
 | **SmolVLA** (LeRobot) | Small VLA | PyTorch | LIBERO (4), ManiSkill (7), RoboCasa (6) | ✅ Benchmarked |
 | **Octo-small** | Transformer policy | JAX | LIBERO (4), ManiSkill (7), RoboCasa (6) | ✅ Benchmarked |
 | **SpatialVLA-4B** | Spatial VLA | PyTorch | LIBERO (4), ManiSkill (7), RoboCasa (6) | ✅ Benchmarked |
@@ -208,23 +282,16 @@ All evaluations run on NVIDIA H100 80GB HBM3 via SLURM. The **same `policy_webso
 
 | Algorithm | Checkpoint | Spatial | Object | Goal | LIBERO-10 | Avg |
 |-----------|-----------|:------:|:------:|:----:|:---------:|:---:|
-| **OpenVLA-OFT** (per-suite ckpt) | openvla-7b-oft-finetuned-libero-{suite} | **94** | **82** | **86** | **58** | **80.0** |
-| **OpenVLA-OFT** (spatial ckpt only) | openvla-7b-oft-finetuned-libero-spatial | **100** | 0 | 6 | 8 | 28.5 |
-| **pi0** | lerobot/pi0_libero_finetuned_v044 | 62 | **76** | **78** | 34 | **62.5** |
-| **SmolVLA** | HuggingFaceVLA/smolvla_libero | 17 | *...* | *...* | *...* | *...* |
-| **SpatialVLA** | IPEC-COMMUNITY/spatialvla-4b-224-pt | *...* | *...* | *...* | *...* | *...* |
-| **pi0.5** | lerobot/pi05_libero_finetuned_v044 | 2 | 0 | 0 | 0 | 0.5 |
-| **Octo** | octo-base | 0 | 0 | 0 | 0 | 0.0 |
+| **OpenVLA-OFT** (per-suite ckpt) | openvla-7b-oft-finetuned-libero-{suite} | **98** | **100** | **94** | **100** | **98.0** |
+| **pi0.5** | lerobot/pi05_libero_finetuned | 88 | 88 | **96** | 96 | **92.0** |
+| **pi0** | lerobot/pi0_libero_finetuned | 60 | 80 | 78 | 42 | **65.0** |
 
-*`...` = evaluation in progress*
-
-**Key findings:**
-- **pi0 generalizes remarkably well** — trained on spatial only, achieves 76%/78% on object/goal (higher than spatial!)
-- **OpenVLA achieves near-perfect** 100% on its training domain (spatial), but 0% on others — strong overfitting
-- **OpenVLA per-suite checkpoints** are much stronger (80% avg) than a single checkpoint (28.5%)
-- **SmolVLA** shows moderate spatial performance (~17%) despite being a much smaller model
-- **SpatialVLA** uses a pre-trained checkpoint (not LIBERO-finetuned) — cross-domain results expected low
-- pi0.5 and Octo show ~0% — the LIBERO fine-tuned checkpoints may have training issues or incompatible preprocessing
+**Key findings (v11 — correct checkpoints + image flip + per-suite resolution):**
+- **OpenVLA-OFT achieves 98% average** across all 4 suites — 100% on object and LIBERO-10 (50/50 episodes each)
+- **pi0.5 is the best single-checkpoint model** at 92% average — one checkpoint handles all 4 suites
+- **pi0 achieves 65% average** — solid generalization from a single checkpoint, but below pi0.5
+- Earlier versions (v9/v10) showed 0% for pi0.5 and pi0 due to wrong checkpoint names (`lerobot/pi0_libero` → base model, not finetuned) and missing image flip (LeRobot applies 180° rotation during data collection)
+- Per-suite checkpoints for OpenVLA are essential: a single spatial checkpoint gets 100%/0%/6%/8% across suites
 
 ### ManiSkill Benchmark (Success Rate %, 5 trials per task)
 
@@ -339,10 +406,14 @@ python agentic/robot_agent/agent.py "在cn19上部署openvla并测试连接"
 
 ### Direct Skill Execution
 ```bash
-# Run benchmark via SLURM
+# One-sentence benchmark (checkpoint auto-resolved from eval_registry)
 python agentic/robot_agent/skills/run_benchmark/run_benchmark.py \
-  --policy openvla --checkpoint moojink/openvla-7b-oft-finetuned-libero-spatial \
-  --benchmark libero_spatial --num_trials 5 --node cn19 --submit
+  --policy openvla --benchmark libero_spatial --submit
+
+# With explicit checkpoint
+python agentic/robot_agent/skills/run_benchmark/run_benchmark.py \
+  --policy pi0.5 --checkpoint lerobot/pi05_libero_finetuned \
+  --benchmark libero_10 --num_trials 5 --node cn19 --submit
 
 # Fix dependencies
 python agentic/robot_agent/skills/fix_deps/fix_deps.py /path/to/repo --max-retries 5

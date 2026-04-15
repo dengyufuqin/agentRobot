@@ -1,6 +1,6 @@
 ---
 name: wrap_policy
-description: "Generate a policy_server.py adapter for a repository, wrapping its model as a WebSocket policy server compatible with policy_websocket."
+description: "[DEPRECATED — kept for back-compat only] Regex-based adapter generator for 6 common patterns (Hydra, from_pretrained, algo_factory, etc.). For any real adapter work, prefer probe_run → extract_io_spec → write_file → validate_policy_server — that flow works on ANY repo, not just the common-pattern subset."
 version: 1.1.0
 category: meta
 parameters:

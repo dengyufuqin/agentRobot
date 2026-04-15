@@ -204,6 +204,73 @@ def skill_to_claude_tool(skill: dict) -> dict:
 # Skill executor
 # ---------------------------------------------------------------------------
 
+INTERACTIVE_EXIT_CODES = {
+    10: "ambiguous — multiple candidates",
+    3:  "low confidence — user fallback needed",
+}
+
+
+def _maybe_disambiguate(skill_name: str, exit_code: int, output: str,
+                        args: dict) -> dict | None:
+    """If running on a TTY and the skill exited with an interactive code,
+    parse candidates from stdout JSON and prompt the user.
+
+    Returns updated args (with the user's choice) for a retry, or None to
+    fall through to the LLM with the raw output.
+    """
+    import sys as _sys
+    if not _sys.stdin.isatty() or exit_code not in INTERACTIVE_EXIT_CODES:
+        return None
+    reason = INTERACTIVE_EXIT_CODES[exit_code]
+    print(f"\n  [INTERACTIVE] {skill_name} exited {exit_code} ({reason})")
+
+    # Try to parse JSON payload from stdout
+    candidates: list[str] = []
+    try:
+        # Walk stdout looking for a JSON object with a 'variants' or
+        # 'candidates' key (download_model) or 'sources_used' (infer_io_spec).
+        import json as _json
+        brace = output.find("{")
+        if brace >= 0:
+            payload = _json.loads(output[brace:output.rfind("}") + 1])
+            for k in ("variants", "candidates", "matches"):
+                if isinstance(payload.get(k), list):
+                    candidates = [str(c) for c in payload[k]]
+                    break
+    except Exception:
+        pass
+
+    if candidates:
+        print("  Candidates:")
+        for i, c in enumerate(candidates):
+            print(f"    [{i}] {c}")
+        try:
+            pick = input("  Pick a number (or blank to skip and let LLM decide)> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return None
+        if pick.isdigit() and 0 <= int(pick) < len(candidates):
+            chosen = candidates[int(pick)]
+            print(f"  -> using {chosen}")
+            new_args = dict(args)
+            # Heuristic: use 'repo_id' for download_model, 'name' otherwise
+            target = "repo_id" if skill_name.startswith("download") else "name"
+            new_args[target] = chosen
+            return new_args
+        return None
+
+    # Exit 3 — ask for a JSON file path
+    if exit_code == 3:
+        try:
+            path = input("  Provide path to user-fallback JSON (blank = skip)> ").strip()
+        except (EOFError, KeyboardInterrupt):
+            return None
+        if path:
+            new_args = dict(args)
+            new_args["user_fallback"] = path
+            return new_args
+    return None
+
+
 def execute_skill(skill: dict, args: dict) -> str:
     """Execute a skill's command template with the given arguments."""
     cmd = skill["command_template"]
@@ -214,8 +281,20 @@ def execute_skill(skill: dict, args: dict) -> str:
         if param_name not in args and "default" in param_def:
             args[param_name] = param_def["default"]
 
-    # Substitute parameters — only replace known parameter names
+    # Auto-encode: if the skill declares `content_b64` but the LLM sent plaintext
+    # `content` (or `text`), encode it here. LLMs can't reliably hand-generate
+    # base64 — this removes that failure mode entirely.
+    import base64 as _b64
     known_params = set(skill["parameters"].keys())
+    if "content_b64" in known_params and "content_b64" not in args:
+        for plain_key in ("content", "text"):
+            if plain_key in args and isinstance(args[plain_key], str):
+                args["content_b64"] = _b64.b64encode(
+                    args[plain_key].encode("utf-8")).decode("ascii")
+                del args[plain_key]
+                break
+
+    # Substitute parameters — only replace known parameter names
     for key, value in args.items():
         cmd = cmd.replace(f"{{{key}}}", str(value))
 
@@ -239,6 +318,14 @@ def execute_skill(skill: dict, args: dict) -> str:
         output = result.stdout
         if result.stderr:
             output += "\n[STDERR]\n" + result.stderr
+
+        if result.returncode in INTERACTIVE_EXIT_CODES:
+            new_args = _maybe_disambiguate(skill["name"], result.returncode,
+                                           result.stdout, args)
+            if new_args is not None:
+                # One retry — re-substitute and re-run
+                return execute_skill(skill, new_args)
+
         if result.returncode != 0:
             output += f"\n[EXIT CODE: {result.returncode}]"
         return output.strip() or "(no output)"

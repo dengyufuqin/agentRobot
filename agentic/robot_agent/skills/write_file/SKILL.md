@@ -1,6 +1,6 @@
 ---
 name: write_file
-description: "Write content to a file via base64 encoding. Use this to create policy_server.py adapters, config files, or scripts with arbitrary content."
+description: "Write content to a file. Use this to create policy_server.py adapters, config files, or scripts. PREFERRED: pass plaintext via `content` (agent auto-encodes). Use `content_b64` only if you already have base64 bytes."
 version: 1.0.0
 category: util
 parameters:
@@ -8,10 +8,14 @@ parameters:
     type: string
     description: "Absolute path to the file to write"
     required: true
+  content:
+    type: string
+    description: "PLAINTEXT file content. USE THIS — the agent handles base64 encoding for you. Do NOT try to generate base64 yourself."
+    required: false
   content_b64:
     type: string
-    description: "Base64-encoded file content (use base64 encoding to avoid shell escaping issues)"
-    required: true
+    description: "Base64-encoded file content. Only use if you already have valid b64 bytes. For Python code etc., use `content` instead."
+    required: false
   make_executable:
     type: string
     description: "If 'true', make the file executable (chmod +x)"

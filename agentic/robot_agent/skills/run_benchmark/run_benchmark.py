@@ -13,15 +13,14 @@ Benchmark format:
     maniskill:PickCube-v1       → ManiSkill PickCube task
     robotwin:beat_block_hammer  → RoboTwin task
 
-Usage:
+Usage (one-sentence deployment — checkpoint auto-resolved from registry):
+    python run_benchmark.py --policy openvla --benchmark libero_spatial
+    python run_benchmark.py --policy pi0.5 --benchmark libero_10
+    python run_benchmark.py --policy pi0 --benchmark libero_goal --num_trials 10
+
+  With explicit checkpoint (overrides registry):
     python run_benchmark.py --policy openvla --checkpoint moojink/openvla-7b-oft-finetuned-libero-spatial \
         --benchmark libero_spatial --num_trials 5
-
-    python run_benchmark.py --policy openvla --checkpoint moojink/openvla-7b-oft-finetuned-libero-spatial \
-        --benchmark maniskill:PickCube-v1 --num_trials 10
-
-    python run_benchmark.py --policy openvla --checkpoint moojink/openvla-7b-oft-finetuned-libero-spatial \
-        --benchmark robotwin:beat_block_hammer --num_trials 5
 """
 
 import argparse
@@ -34,6 +33,11 @@ import time
 from pathlib import Path
 
 AGENT_ROOT = Path(os.environ.get("AGENTROBOT_ROOT", str(Path(__file__).resolve().parent.parent.parent.parent.parent)))
+
+# Add policy_websocket to path for eval_registry imports
+_PW_SRC = str(AGENT_ROOT / "agentic" / "policy_websocket" / "src")
+if _PW_SRC not in sys.path:
+    sys.path.insert(0, _PW_SRC)
 
 # Nodes with known EGL rendering issues (SIGABRT on MuJoCo/robosuite)
 EGL_EXCLUDE_NODES = os.environ.get("EGL_EXCLUDE_NODES", "cn19,cn23")
@@ -95,6 +99,24 @@ EVAL_CLIENTS = {
         ],
         "env_vars": {},
     },
+    "robocasa": {
+        "eval_python": str(AGENT_ROOT / "robocasa" / ".venv" / "bin" / "python3"),
+        "eval_script": str(AGENT_ROOT / "robocasa" / "scripts" / "run_eval.py"),
+        "eval_pythonpath": [
+            str(AGENT_ROOT / "agentic" / "policy_websocket" / "src"),
+            str(AGENT_ROOT / "robocasa"),
+        ],
+        "eval_args": [
+            "--policy_server_addr", "{server_addr}",
+            "--policy", "{policy_flag}",
+            "--task_name", "{task_id}",
+            "--num_trials", "{num_trials}",
+            "--arm_controller", "{arm_controller}",
+            "--log_dir", "{log_dir}",
+            "--no_save_video",
+        ],
+        "env_vars": {"MUJOCO_GL": "egl"},
+    },
 }
 
 # ---------------------------------------------------------------------------
@@ -114,6 +136,10 @@ POLICY_CONFIGS = {
         "policy_flag": "openvla-oft",
     },
     "openvla-oft": {"alias": "openvla"},
+    # LeRobot-based model aliases — all use the same server infrastructure
+    "pi0": {"alias": "lerobot"},
+    "pi0.5": {"alias": "lerobot"},
+    "smolvla": {"alias": "lerobot"},
     "lerobot": {
         "server_python": str(AGENT_ROOT / "lerobot" / ".venv" / "bin" / "python3"),
         "server_script": str(AGENT_ROOT / "lerobot" / "policy_server.py"),
@@ -123,7 +149,7 @@ POLICY_CONFIGS = {
         ],
         "server_args": ["--checkpoint", "{checkpoint}", "--port", "{port}"],
         "env_vars": {},
-        "arm_controller": "joint_vel",
+        "arm_controller": "cartesian_pose",
         "policy_flag": "lerobot",
     },
     "diffusion_policy": {
@@ -137,6 +163,18 @@ POLICY_CONFIGS = {
         "env_vars": {},
         "arm_controller": "cartesian_pose",
         "policy_flag": "diffusion_policy",
+    },
+    "spatialvla": {
+        "server_python": str(AGENT_ROOT / "SpatialVLA" / ".venv" / "bin" / "python3"),
+        "server_script": str(AGENT_ROOT / "SpatialVLA" / "policy_server.py"),
+        "server_pythonpath": [
+            str(AGENT_ROOT / "agentic" / "policy_websocket" / "src"),
+            str(AGENT_ROOT / "SpatialVLA"),
+        ],
+        "server_args": ["--checkpoint", "{checkpoint}", "--port", "{port}"],
+        "env_vars": {"HF_HOME": os.path.expanduser("~/.cache/huggingface")},
+        "arm_controller": "cartesian_pose",
+        "policy_flag": "spatialvla",
     },
 }
 
@@ -162,7 +200,113 @@ BENCHMARK_CONFIGS = {
     "robotwin:stack_blocks_two":   {"eval_client": "robotwin", "task_id": "stack_blocks_two",    "max_steps": 300},
     "robotwin:place_bread_basket": {"eval_client": "robotwin", "task_id": "place_bread_basket",  "max_steps": 300},
     "robotwin:open_laptop":        {"eval_client": "robotwin", "task_id": "open_laptop",         "max_steps": 300},
+    # RoboCasa tasks (common ones)
+    "robocasa:PnPCounterToCab":    {"eval_client": "robocasa", "task_id": "PnPCounterToCab",     "max_steps": 300},
+    "robocasa:PnPCabToCounter":    {"eval_client": "robocasa", "task_id": "PnPCabToCounter",     "max_steps": 300},
+    "robocasa:PnPCounterToSink":   {"eval_client": "robocasa", "task_id": "PnPCounterToSink",    "max_steps": 300},
+    "robocasa:PnPCounterToStove":  {"eval_client": "robocasa", "task_id": "PnPCounterToStove",   "max_steps": 300},
+    "robocasa:OpenSingleDoor":     {"eval_client": "robocasa", "task_id": "OpenSingleDoor",      "max_steps": 200},
+    "robocasa:CloseDrawer":        {"eval_client": "robocasa", "task_id": "CloseDrawer",         "max_steps": 200},
+    "robocasa:TurnOnStove":        {"eval_client": "robocasa", "task_id": "TurnOnStove",         "max_steps": 200},
+    "robocasa:TurnOffSinkFaucet":  {"eval_client": "robocasa", "task_id": "TurnOffSinkFaucet",   "max_steps": 200},
 }
+
+
+def run_preflight(policy_name, benchmark_name, checkpoint, allow_cross_domain=False):
+    """Consult eval_registry to check readiness and auto-fix config.
+
+    Returns:
+        (ok, registry_cfg, warnings) where:
+        - ok: True if evaluation should proceed
+        - registry_cfg: EvalConfig from registry (or None)
+        - warnings: list of warning strings
+    """
+    try:
+        from policy_websocket.eval_registry import lookup, Readiness
+    except ImportError:
+        return True, None, ["eval_registry not available — skipping preflight"]
+
+    # Map policy names to registry keys
+    _POLICY_MAP = {
+        "openvla": "openvla", "openvla-oft": "openvla",
+        "pi0": "pi0", "pi0.5": "pi0.5", "smolvla": "smolvla",
+        "spatialvla": "spatialvla",
+        "lerobot": None,  # generic lerobot needs checkpoint-based detection
+    }
+
+    reg_policy = _POLICY_MAP.get(policy_name, policy_name)
+
+    # For generic "lerobot", detect model from checkpoint name
+    if reg_policy is None and checkpoint:
+        ckpt_lower = checkpoint.lower()
+        if "pi05" in ckpt_lower or "pi0.5" in ckpt_lower:
+            reg_policy = "pi0.5"
+        elif "pi0" in ckpt_lower:
+            reg_policy = "pi0"
+        elif "smolvla" in ckpt_lower:
+            reg_policy = "smolvla"
+        else:
+            reg_policy = "lerobot"
+
+    # Map benchmark to registry format
+    reg_bench = benchmark_name
+    if benchmark_name.startswith("libero_"):
+        reg_bench = f"libero/{benchmark_name}"
+    elif ":" in benchmark_name:
+        # platform:task format (e.g. "maniskill:PickCube-v1") → try platform key
+        reg_bench = benchmark_name.split(":")[0]
+
+    cfg = lookup(reg_policy, reg_bench)
+    if cfg is None:
+        return True, None, [f"No registry entry for {reg_policy}×{reg_bench} — running without preflight"]
+
+    warnings = []
+
+    # Check readiness
+    if cfg.readiness == Readiness.UNSUPPORTED:
+        print(f"\n  PREFLIGHT BLOCKED: {cfg.summary()}")
+        return False, cfg, ["UNSUPPORTED — known incompatibility, will not run"]
+
+    if cfg.readiness == Readiness.NEEDS_FINETUNE:
+        print(f"\n  PREFLIGHT WARNING: {cfg.summary()}")
+        print(f"  This model needs finetuning for {reg_bench}. Expected: ~{cfg.expected_success_rate:.0%}")
+        warnings.append(f"NEEDS_FINETUNE: expect ~{cfg.expected_success_rate:.0%}")
+        if not allow_cross_domain:
+            print(f"  Use --allow_cross_domain to run anyway.")
+            return False, cfg, warnings
+        print(f"  Running anyway (--allow_cross_domain)")
+
+    if cfg.readiness == Readiness.CROSS_DOMAIN:
+        print(f"\n  PREFLIGHT WARNING: {cfg.summary()}")
+        print(f"  Cross-domain evaluation — expect ~{cfg.expected_success_rate:.0%}")
+        warnings.append(f"CROSS_DOMAIN: expect ~{cfg.expected_success_rate:.0%}")
+        if not allow_cross_domain:
+            print(f"  Use --allow_cross_domain to run anyway.")
+            return False, cfg, warnings
+        print(f"  Running anyway (--allow_cross_domain)")
+
+    if cfg.readiness == Readiness.READY:
+        if cfg.expected_success_rate is not None:
+            print(f"  Preflight: READY (expected {cfg.expected_success_rate:.0%} from {cfg.expected_source})")
+
+    # Print known issues
+    for issue in cfg.known_issues:
+        warnings.append(issue)
+        print(f"  Known issue: {issue}")
+
+    # Note auto-resolution availability (actual resolution happens in main())
+    if not checkpoint and cfg.checkpoint:
+        warnings.append(f"Registry has checkpoint: {cfg.checkpoint}")
+
+    # Check checkpoint mismatch (only when user explicitly provided one)
+    if cfg.checkpoint and checkpoint and cfg.checkpoint != checkpoint:
+        warnings.append(
+            f"Checkpoint mismatch: you gave '{checkpoint}' but registry recommends '{cfg.checkpoint}'"
+        )
+        print(f"  WARNING: Registry recommends checkpoint '{cfg.checkpoint}'")
+        print(f"           You provided '{checkpoint}'")
+
+    return True, cfg, warnings
 
 
 def resolve_benchmark(name):
@@ -479,7 +623,8 @@ def list_benchmarks():
 def main():
     parser = argparse.ArgumentParser(description="Run benchmark evaluation end-to-end (multi-platform)")
     parser.add_argument("--policy", required=True, help="Policy name (e.g. openvla, diffusion_policy)")
-    parser.add_argument("--checkpoint", required=True, help="Model checkpoint path or HF model ID")
+    parser.add_argument("--checkpoint", default=None,
+                        help="Model checkpoint path or HF model ID (auto-resolved from registry if omitted)")
     parser.add_argument("--benchmark", required=True,
                         help="Benchmark: libero_spatial, maniskill:PickCube-v1, robotwin:beat_block_hammer")
     parser.add_argument("--num_trials", type=int, default=5, help="Number of trials per task")
@@ -493,6 +638,12 @@ def main():
                         help="Submit as SLURM job instead of running locally")
     parser.add_argument("--list_benchmarks", action="store_true",
                         help="List all available benchmarks and exit")
+    parser.add_argument("--allow_cross_domain", action="store_true",
+                        help="Allow running NEEDS_FINETUNE / CROSS_DOMAIN combos (expect ~0%%)")
+    parser.add_argument("--skip_preflight", action="store_true",
+                        help="Skip eval_registry preflight check")
+    parser.add_argument("--unnorm_key", default=None,
+                        help="Unnorm key for OpenVLA (auto-detected from registry if not set)")
     args = parser.parse_args()
 
     if args.list_benchmarks:
@@ -556,7 +707,70 @@ def main():
         print(f"ERROR: No eval client '{client_name}'. Available: {list(EVAL_CLIENTS.keys())}")
         sys.exit(1)
 
-    print(f"=== Benchmark Run ===")
+    # --- Preflight: consult eval_registry ---
+    if not args.skip_preflight:
+        ok, reg_cfg, warnings = run_preflight(
+            args.policy, args.benchmark, args.checkpoint,
+            allow_cross_domain=args.allow_cross_domain,
+        )
+        for w in warnings:
+            print(f"  [preflight] {w}")
+        if not ok:
+            print(f"\nPreflight blocked this evaluation. Use --allow_cross_domain or --skip_preflight to override.")
+            sys.exit(2)
+
+        # Auto-resolve checkpoint from registry when not provided by user
+        if not args.checkpoint and reg_cfg and reg_cfg.checkpoint:
+            args.checkpoint = reg_cfg.checkpoint
+            print(f"  Auto-resolved checkpoint: {args.checkpoint}")
+
+        # Auto-apply registry server_args (e.g. --unnorm_key for OpenVLA)
+        if reg_cfg and reg_cfg.server_args:
+            for flag, val in reg_cfg.server_args.items():
+                # Don't override checkpoint — handled separately above
+                if flag == "--pretrained_checkpoint" or flag == "--checkpoint":
+                    continue
+                # Check if this arg is already in the policy config
+                flat_args = " ".join(policy_cfg.get("server_args", []))
+                if flag not in flat_args:
+                    policy_cfg.setdefault("server_args", []).extend([flag, val])
+                    print(f"  Auto-added from registry: {flag} {val}")
+
+        # Auto-apply arm_controller from registry (overrides policy default)
+        if reg_cfg and reg_cfg.arm_controller:
+            old_ac = policy_cfg.get("arm_controller", "")
+            if old_ac != reg_cfg.arm_controller:
+                policy_cfg["arm_controller"] = reg_cfg.arm_controller
+                print(f"  Auto-override arm_controller: {old_ac} → {reg_cfg.arm_controller}")
+
+        # Auto-apply --unnorm_key for OpenVLA if not explicitly set
+        if args.unnorm_key:
+            flat_args = " ".join(policy_cfg.get("server_args", []))
+            if "--unnorm_key" not in flat_args:
+                policy_cfg["server_args"].extend(["--unnorm_key", args.unnorm_key])
+                print(f"  Added --unnorm_key {args.unnorm_key}")
+
+    # Final checkpoint check — fallback to a default per policy for cross-domain
+    if not args.checkpoint:
+        _DEFAULT_CHECKPOINTS = {
+            "openvla": "moojink/openvla-7b-oft-finetuned-libero-spatial",
+            "pi0": "lerobot/pi0_libero_finetuned",
+            "pi0.5": "lerobot/pi05_libero_finetuned",
+            "smolvla": "lerobot/smolvla_base",
+            "spatialvla": "IPEC-COMMUNITY/spatialvla-4b-224-pt",
+        }
+        resolved = resolve_policy(args.policy)
+        policy_key = args.policy
+        fallback = _DEFAULT_CHECKPOINTS.get(policy_key)
+        if fallback:
+            args.checkpoint = fallback
+            print(f"  Fallback checkpoint (no registry match): {args.checkpoint}")
+        else:
+            print("ERROR: No --checkpoint provided and registry has no checkpoint for this combo.")
+            print("  Provide --checkpoint explicitly or check eval_registry entries.")
+            sys.exit(1)
+
+    print(f"\n=== Benchmark Run ===")
     print(f"Policy:     {args.policy}")
     print(f"Checkpoint: {args.checkpoint}")
     print(f"Benchmark:  {args.benchmark}")

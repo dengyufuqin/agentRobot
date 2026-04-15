@@ -20,6 +20,10 @@ parameters:
     type: string
     description: "If 'true', install the repo package with --no-deps (useful when version conflicts exist)"
     default: "false"
+  smoke:
+    type: string
+    description: "Comma-separated module names to import-test after install (e.g. 'torch,transformers,lerobot'). Non-zero exit if any fail — catches broken deps before the agent wastes time trying to run the repo."
+    required: false
 requires:
   bins: [uv]
 timeout: 600
@@ -119,6 +123,32 @@ command_template: |
     echo ""
     echo "=== Auto-fixing dependencies ==="
     python3 "$FIX_DEPS" "$REPO" --max-retries 3 2>&1
+  fi
+
+  # Smoke test: import the modules the user specified
+  if [ -n "{smoke}" ]; then
+    echo ""
+    echo "=== Smoke import test ==="
+    SMOKE_FAIL=0
+    for mod in $(echo "{smoke}" | tr ',' ' '); do
+      if .venv/bin/python3 -c "import $mod" 2>&1 | head -20; then
+        :  # success — no output from python if import ok
+      else
+        :
+      fi
+      if .venv/bin/python3 -c "import $mod" 2>/dev/null; then
+        echo "  ✓ $mod"
+      else
+        echo "  ✗ $mod — IMPORT FAILED"
+        .venv/bin/python3 -c "import $mod" 2>&1 | tail -5
+        SMOKE_FAIL=1
+      fi
+    done
+    if [ "$SMOKE_FAIL" = "1" ]; then
+      echo "=== Smoke test FAILED — some imports broken ==="
+      exit 2
+    fi
+    echo "=== Smoke test passed ==="
   fi
 
   echo ""

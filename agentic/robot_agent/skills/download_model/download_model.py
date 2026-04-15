@@ -124,6 +124,33 @@ def main() -> int:
             allow_patterns=allow,
         )
         print(f"[download_model] DONE: {path}")
+
+        # Auto-patch missing base-model config files. Many community-finetuned
+        # checkpoints ship only weights + the modified config.json — they expect
+        # the auto_map paths (e.g. configuration_prismatic.py) to be resolvable
+        # but never copy them in. Detect this and grab from the canonical base.
+        import os, shutil
+        from huggingface_hub import hf_hub_download as _hf_dl
+        BASE_PATCHES = [
+            (lambda p: "openvla" in pick.lower(),
+             "openvla/openvla-7b",
+             ["configuration_prismatic.py", "modeling_prismatic.py", "processing_prismatic.py"]),
+        ]
+        for cond, base_repo, files in BASE_PATCHES:
+            if not cond(pick):
+                continue
+            patched = []
+            for fname in files:
+                if not os.path.isfile(os.path.join(path, fname)):
+                    try:
+                        src = _hf_dl(base_repo, fname)
+                        shutil.copy(src, os.path.join(path, fname))
+                        patched.append(fname)
+                    except Exception:
+                        pass
+            if patched:
+                print(f"[download_model] auto-patched from {base_repo}: {patched}")
+
         print(json.dumps({"repo_id": pick, "local_path": str(path)}))
         return 0
     except Exception as e:

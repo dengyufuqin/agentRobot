@@ -590,13 +590,13 @@ def _pick_available_egl_node(nodes: list[str]) -> str:
     """Pick an EGL-good node that has free GPUs, falling back to random."""
     try:
         result = subprocess.run(
-            ["sinfo", "-n", ",".join(nodes), "-o", "%N %G %e %t", "--noheader"],
+            ["sinfo", "-N", "-n", ",".join(nodes), "-o", "%N %t", "--noheader"],
             capture_output=True, text=True, timeout=10,
         )
         available = []
         for line in result.stdout.strip().splitlines():
             parts = line.split()
-            if len(parts) >= 4 and parts[3] in ("idle", "mix", "mixed"):
+            if len(parts) >= 2 and parts[1] in ("idle", "idle~", "mix", "mix-", "mixed"):
                 available.append(parts[0])
         if available:
             return random.choice(available)

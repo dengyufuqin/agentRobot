@@ -26,6 +26,7 @@ Usage (one-sentence deployment — checkpoint auto-resolved from registry):
 import argparse
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -39,8 +40,10 @@ _PW_SRC = str(AGENT_ROOT / "agentic" / "policy_websocket" / "src")
 if _PW_SRC not in sys.path:
     sys.path.insert(0, _PW_SRC)
 
-# Nodes with known EGL rendering issues (SIGABRT on MuJoCo/robosuite)
-EGL_EXCLUDE_NODES = os.environ.get("EGL_EXCLUDE_NODES", "cn10,cn17,cn19,cn20,cn23")
+# MuJoCo EGL rendering only works on a subset of nodes (driver/firmware dependent).
+# LIBERO and RoboCasa (robosuite) need EGL; ManiSkill (SAPIEN/Vulkan) is unaffected.
+EGL_GOOD_NODES = os.environ.get("EGL_GOOD_NODES", "cn24,cn25,cn26,cn27")
+EGL_EXCLUDE_NODES = os.environ.get("EGL_EXCLUDE_NODES", "")
 
 # ---------------------------------------------------------------------------
 # Eval clients — each defines how to run evaluation for a benchmark platform
@@ -583,6 +586,25 @@ def run_eval(benchmark_cfg, policy_cfg, port, num_trials=5, log_dir=None,
     }
 
 
+def _pick_available_egl_node(nodes: list[str]) -> str:
+    """Pick an EGL-good node that has free GPUs, falling back to random."""
+    try:
+        result = subprocess.run(
+            ["sinfo", "-n", ",".join(nodes), "-o", "%N %G %e %t", "--noheader"],
+            capture_output=True, text=True, timeout=10,
+        )
+        available = []
+        for line in result.stdout.strip().splitlines():
+            parts = line.split()
+            if len(parts) >= 4 and parts[3] in ("idle", "mix", "mixed"):
+                available.append(parts[0])
+        if available:
+            return random.choice(available)
+    except Exception:
+        pass
+    return random.choice(nodes)
+
+
 def submit_as_slurm_job(policy_cfg, args, benchmark_cfg):
     """Submit the entire benchmark as a SLURM job (server + eval in one job)."""
     log_dir = args.log_dir or str(AGENT_ROOT / "logs" / "eval_results")
@@ -638,14 +660,26 @@ def submit_as_slurm_job(policy_cfg, args, benchmark_cfg):
         eval_env_exports.append(f"export {k}={v}")
     eval_env_block = "\n".join(eval_env_exports)
 
+    # Robosuite-based benchmarks (libero, robocasa) need EGL-compatible nodes
+    needs_egl = client_name in ("libero", "robocasa")
+    if args.node:
+        node_directive = f"#SBATCH --nodelist={args.node}"
+    elif needs_egl and EGL_GOOD_NODES:
+        egl_nodes = [n.strip() for n in EGL_GOOD_NODES.split(",") if n.strip()]
+        chosen_node = _pick_available_egl_node(egl_nodes)
+        node_directive = f"#SBATCH --nodelist={chosen_node}"
+    else:
+        node_directive = ""
+    exclude_directive = f"#SBATCH --exclude={EGL_EXCLUDE_NODES}" if EGL_EXCLUDE_NODES else ""
+
     sbatch_script = f"""#!/bin/bash
 #SBATCH --job-name=bench-{args.policy[:8]}
 #SBATCH --partition=all
 #SBATCH --gres=gpu:1
 #SBATCH --time=02:00:00
 #SBATCH --output={job_log}
-{"#SBATCH --nodelist=" + args.node if args.node else ""}
-#SBATCH --exclude={EGL_EXCLUDE_NODES}
+{node_directive}
+{exclude_directive}
 
 {extra_env_block}
 
@@ -943,6 +977,12 @@ def main():
 
     # Mode 1: Submit as SLURM job
     has_slurm = subprocess.run(["which", "sbatch"], capture_output=True).returncode == 0
+    try:
+        has_gpu = subprocess.run(["nvidia-smi"], capture_output=True).returncode == 0
+    except FileNotFoundError:
+        has_gpu = False
+    if not args.submit and has_slurm and not has_gpu and not args.server_addr:
+        args.submit = True
     if args.submit or (args.node and not args.server_addr):
         if not has_slurm:
             print("SLURM not available — falling back to local execution mode")

@@ -40,7 +40,7 @@ if _PW_SRC not in sys.path:
     sys.path.insert(0, _PW_SRC)
 
 # Nodes with known EGL rendering issues (SIGABRT on MuJoCo/robosuite)
-EGL_EXCLUDE_NODES = os.environ.get("EGL_EXCLUDE_NODES", "cn17,cn19,cn23")
+EGL_EXCLUDE_NODES = os.environ.get("EGL_EXCLUDE_NODES", "cn10,cn17,cn19,cn20,cn23")
 
 # ---------------------------------------------------------------------------
 # Eval clients — each defines how to run evaluation for a benchmark platform
@@ -62,7 +62,7 @@ EVAL_CLIENTS = {
             "--log_dir", "{log_dir}",
             "--no_save_video",
         ],
-        "env_vars": {"MUJOCO_GL": "egl"},
+        "env_vars": {"MUJOCO_GL": "osmesa"},
     },
     "maniskill": {
         "eval_python": str(AGENT_ROOT / "ManiSkill" / ".venv" / "bin" / "python3"),
@@ -115,7 +115,7 @@ EVAL_CLIENTS = {
             "--log_dir", "{log_dir}",
             "--no_save_video",
         ],
-        "env_vars": {"MUJOCO_GL": "egl"},
+        "env_vars": {"MUJOCO_GL": "osmesa"},
     },
 }
 
@@ -458,7 +458,7 @@ def start_server(policy_cfg, checkpoint, port, gpu_id, node=None):
         env_exports = " ".join(f"{k}={v}" for k, v in [
             ("PYTHONPATH", pythonpath),
             ("CUDA_VISIBLE_DEVICES", str(gpu_id)),
-            ("MUJOCO_GL", "egl"),
+            ("MUJOCO_GL", "osmesa"),
         ] + [(k, v) for k, v in policy_cfg.get("env_vars", {}).items()])
 
         srun_cmd = [

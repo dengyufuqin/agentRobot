@@ -62,7 +62,7 @@ EVAL_CLIENTS = {
             "--log_dir", "{log_dir}",
             "--no_save_video",
         ],
-        "env_vars": {"MUJOCO_GL": "osmesa"},
+        "env_vars": {"MUJOCO_GL": "egl"},
     },
     "maniskill": {
         "eval_python": str(AGENT_ROOT / "ManiSkill" / ".venv" / "bin" / "python3"),
@@ -115,7 +115,7 @@ EVAL_CLIENTS = {
             "--log_dir", "{log_dir}",
             "--no_save_video",
         ],
-        "env_vars": {"MUJOCO_GL": "osmesa"},
+        "env_vars": {"MUJOCO_GL": "egl"},
     },
 }
 
@@ -458,7 +458,7 @@ def start_server(policy_cfg, checkpoint, port, gpu_id, node=None):
         env_exports = " ".join(f"{k}={v}" for k, v in [
             ("PYTHONPATH", pythonpath),
             ("CUDA_VISIBLE_DEVICES", str(gpu_id)),
-            ("MUJOCO_GL", "osmesa"),
+            ("MUJOCO_GL", "egl"),
         ] + [(k, v) for k, v in policy_cfg.get("env_vars", {}).items()])
 
         srun_cmd = [

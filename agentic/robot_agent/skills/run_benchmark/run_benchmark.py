@@ -40,7 +40,7 @@ if _PW_SRC not in sys.path:
     sys.path.insert(0, _PW_SRC)
 
 # Nodes with known EGL rendering issues (SIGABRT on MuJoCo/robosuite)
-EGL_EXCLUDE_NODES = os.environ.get("EGL_EXCLUDE_NODES", "cn19,cn23")
+EGL_EXCLUDE_NODES = os.environ.get("EGL_EXCLUDE_NODES", "cn17,cn19,cn23")
 
 # ---------------------------------------------------------------------------
 # Eval clients — each defines how to run evaluation for a benchmark platform
@@ -219,29 +219,54 @@ def is_openpi_checkpoint(ckpt_path: str) -> bool:
     return False
 
 
-def route_openpi_config(benchmark_name: str, ckpt_path: str | None = None) -> str:
-    """Pick the closest stock openpi config for a given benchmark. The training
-    teams use custom configs that aren't in stock openpi, but the model arch is
-    fully specified by the weights — a matching stock config (action_dim,
-    horizon, robot type) is enough for inference.
-
-    Mapping rules:
-      libero    → pi0_fast_libero  (Franka, 7 DoF)
-      maniskill → pi0_fast_libero  (Franka, 7 DoF — closest stock match)
-      robocasa  → pi0_fast_libero  (PandaMobile, 7 DoF arm)
-      droid     → pi0_fast_droid   (8 DoF including gripper)
-      calvin    → pi0_fast_libero  (Franka, 7 DoF)
-    Falls back to pi0_fast_libero (most flexible 7-DoF Franka config).
+def _detect_pi_family(ckpt_path: str | None) -> str:
+    """Detect pi-family architecture from checkpoint contents.
+    Returns 'pi05', 'pi0_fast', or 'pi0'. The stock openpi server's load path
+    branches on this — Pi0FASTConfig lacks a `.pi05` attribute, so routing a
+    pi0.5 safetensors ckpt to a pi0_fast config crashes.
     """
+    if not ckpt_path:
+        return "pi0_fast"
+    p = Path(ckpt_path)
+    name = p.name.lower()
+    # Strongest signal: explicit family token in path
+    if "pi05" in name or "pi0.5" in name or "pi0_5" in name:
+        return "pi05"
+    if "pi0_fast" in name or "pi0fast" in name or "pi-fast" in name:
+        return "pi0_fast"
+    # Inspect metadata.pt / config.json hints
+    for cfg_name in ("config.json", "metadata.json"):
+        cfg_path = p / cfg_name
+        if cfg_path.is_file():
+            try:
+                txt = cfg_path.read_text(errors="ignore").lower()
+                if "pi05" in txt or "pi0.5" in txt:
+                    return "pi05"
+                if "pi0_fast" in txt or "pi0fast" in txt:
+                    return "pi0_fast"
+            except Exception:
+                pass
+    return "pi0_fast"  # safe default — most community ckpts are pi0_fast
+
+
+def route_openpi_config(benchmark_name: str, ckpt_path: str | None = None) -> str:
+    """Pick the closest stock openpi config for a given benchmark+family.
+    The training teams use custom configs that aren't in stock openpi, but the
+    model arch is fully specified by the weights — a matching stock config
+    (action_dim, horizon, robot type, family) is enough for inference.
+
+    Family routing avoids the `Pi0FASTConfig has no attribute 'pi05'` crash:
+      pi05      → pi05_libero / pi05_droid
+      pi0_fast  → pi0_fast_libero / pi0_fast_droid
+      pi0       → pi0_libero / pi0_droid
+    Benchmark routing (per family):
+      libero/maniskill/robocasa/calvin → *_libero (Franka, 7 DoF)
+      droid                             → *_droid  (8 DoF)
+    """
+    family = _detect_pi_family(ckpt_path)
     bm = benchmark_name.split(":")[0].lower()
-    table = {
-        "libero":    "pi0_fast_libero",
-        "maniskill": "pi0_fast_libero",
-        "robocasa":  "pi0_fast_libero",
-        "droid":     "pi0_fast_droid",
-        "calvin":    "pi0_fast_libero",
-    }
-    return table.get(bm, "pi0_fast_libero")
+    bench_slot = "droid" if bm == "droid" else "libero"
+    return f"{family}_{bench_slot}"
 
 # ---------------------------------------------------------------------------
 # Known benchmarks — maps name → eval client + task_id + defaults
@@ -879,6 +904,27 @@ def main():
         openpi_cfg_name = route_openpi_config(args.benchmark, args.checkpoint)
         print(f"  [route] Detected OpenPI/orbax format → switching to openpi server")
         print(f"          --config {openpi_cfg_name} (matched to '{args.benchmark}')")
+
+        # Patch norm_stats path: stock openpi configs look at
+        # assets/<asset_id>/norm_stats.json (e.g. physical-intelligence/libero),
+        # but community ckpts use custom asset_ids ("robocasa_lerobot_30demos"
+        # for kimtaey, "<bm>" under physical-intelligence/ for RLinf HF mirror).
+        # Symlink the actual norm_stats to the path the chosen config expects.
+        try:
+            ckpt_p = Path(args.checkpoint)
+            asset_target = ckpt_p / "assets" / "physical-intelligence" / openpi_cfg_name.replace("pi0_fast_", "").replace("pi05_", "").replace("pi0_", "")
+            # For pi0_fast_libero → "libero"; pi0_fast_droid → "droid"
+            target_path = asset_target / "norm_stats.json"
+            if not target_path.exists():
+                # Find existing norm_stats.json anywhere under this ckpt
+                candidates = list(ckpt_p.rglob("norm_stats.json"))
+                if candidates:
+                    asset_target.mkdir(parents=True, exist_ok=True)
+                    target_path.symlink_to(candidates[0])
+                    print(f"  [patch] symlinked norm_stats: {candidates[0]} → {target_path}")
+        except Exception as e:
+            print(f"  [warn] norm_stats auto-patch failed: {e}")
+
         args.policy = "openpi"
         policy_cfg = resolve_policy("openpi")
         # Substitute openpi_config into server_args template

@@ -1,0 +1,81 @@
+{
+  "policy": "pi0",
+  "benchmark": "libero",
+  "checkpoint": "/mnt/vast/workspaces/JAIF/dy/datasets/agent_robot/checkpoints/pi0-libero_spatial-20260414_133536",
+  "eval_repo": null,
+  "paper_url": null,
+  "fields": {
+    "image_resolution": {
+      "value": 224,
+      "source": "lerobot pi0 preprocessor_config size=224"
+    },
+    "max_episode_steps": {
+      "value": 220,
+      "source": "LIBERO spec"
+    },
+    "camera": {
+      "value": "observation.image (agentview) + observation.image.wrist",
+      "source": "lerobot pi0_libero config \u2014 observation-prefixed keys"
+    },
+    "control_mode": {
+      "value": "OSC_POSE",
+      "source": "LIBERO default; arm_controller=cartesian_pose"
+    },
+    "obs_mode": {
+      "value": "rgb",
+      "source": "LIBERO default"
+    },
+    "prompt_format": {
+      "value": "<plain text instruction>  # PaliGemma tokenizer",
+      "source": "lerobot Pi0 forward path"
+    },
+    "image_flip_180deg": {
+      "value": true,
+      "source": "feedback_lerobot_libero_flip.md \u2014 pi0 needs flip like pi0.5"
+    },
+    "resize_method": {
+      "value": "bilinear",
+      "source": "lerobot image processor default"
+    },
+    "image_resize_before_model": {
+      "value": true,
+      "source": "lerobot resizes inside processor"
+    },
+    "center_crop": {
+      "value": false,
+      "source": "lerobot pi0 preprocessor_config: no center_crop"
+    },
+    "gripper_post_processing": {
+      "value": "8D state (7 joint + 1 gripper); LIBERO convention -1=open",
+      "source": "feedback_openpi_libero_vs_droid_obs.md"
+    },
+    "wait_steps": {
+      "value": 10,
+      "source": "LIBERO eval standard"
+    },
+    "unnorm_key": {
+      "value": "physical-intelligence/libero",
+      "source": "lerobot pi0_libero assets/physical-intelligence/libero/norm_stats.json"
+    },
+    "state_dim": {
+      "value": 8,
+      "source": "pi0 LIBERO: 7 joint + 1 gripper"
+    },
+    "action_dim": {
+      "value": 7,
+      "source": "pi0 action decoder 7-DoF"
+    },
+    "required_obs_keys": {
+      "value": [
+        "observation/image",
+        "observation/wrist_image",
+        "observation/state"
+      ],
+      "source": "openpi pi0_libero config observation/* keys"
+    },
+    "obs_wrapper": {
+      "value": "flat_dict",
+      "source": "openpi server flat dict"
+    }
+  }
+}

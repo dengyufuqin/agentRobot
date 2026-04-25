@@ -139,3 +139,10 @@ run_benchmark(policy="pi0", benchmark="libero_goal", num_trials=10)
 
 The preflight system blocks known-bad combos (NEEDS_FINETUNE, CROSS_DOMAIN) by default.
 Use `allow_cross_domain=true` to override for baseline measurements.
+
+## Known traps
+
+Before running a new policy × benchmark combo, skim `KNOWN_TRAPS.md`
+(same directory). Every entry there is something that burned real SLURM
+time at least once — SLURM/EGL nodelist, port collision, protocol-gate
+routing, ckpt-class mismatch, per-policy flip/crop/OFT-vs-base, etc.

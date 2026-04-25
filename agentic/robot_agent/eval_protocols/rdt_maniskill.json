@@ -1,0 +1,82 @@
+{
+  "policy": "rdt",
+  "benchmark": "maniskill",
+  "checkpoint": "/mnt/vast/workspaces/JAIF/dy/datasets/agent_robot/checkpoints/rdt-maniskill",
+  "eval_repo": null,
+  "paper_url": null,
+  "fields": {
+    "image_resolution": {
+      "value": 384,
+      "source": "RDT-1B uses SigLIP-384"
+    },
+    "max_episode_steps": {
+      "value": 300,
+      "source": "ManiSkill RPD convention"
+    },
+    "camera": {
+      "value": "HumanCameraWrapper \u2014 env.render()",
+      "source": "RDT ManiSkill eval matches RPD path"
+    },
+    "control_mode": {
+      "value": "pd_ee_delta_pose",
+      "source": "ManiSkill RPD convention"
+    },
+    "obs_mode": {
+      "value": "rgb",
+      "source": "ManiSkill default"
+    },
+    "prompt_format": {
+      "value": "<plain text instruction>  # RDT uses T5 lang embedding (precomputed in lang_embeds/)",
+      "source": "rdt-maniskill/lang_embeds directory + RDT-1B paper"
+    },
+    "image_flip_180deg": {
+      "value": false,
+      "source": "ManiSkill human_render is upright"
+    },
+    "resize_method": {
+      "value": "bicubic",
+      "source": "SigLIP default resample=bicubic"
+    },
+    "image_resize_before_model": {
+      "value": true,
+      "source": "SigLIP-384 processor resizes to 384"
+    },
+    "center_crop": {
+      "value": false,
+      "source": "RDT finetune training used no center-crop"
+    },
+    "gripper_post_processing": {
+      "value": "7-DoF + 1 gripper; diffusion policy output",
+      "source": "RDT-1B action head (64-step diffusion chunk)"
+    },
+    "wait_steps": {
+      "value": 10,
+      "source": "ManiSkill harness default"
+    },
+    "unnorm_key": {
+      "value": "maniskill",
+      "source": "rdt-maniskill/diffusion_policy norm stats key"
+    },
+    "state_dim": {
+      "value": 8,
+      "source": "RDT ManiSkill: eef(3)+axis_angle(3)+gripper(2)"
+    },
+    "action_dim": {
+      "value": 7,
+      "source": "RDT-1B action decoder outputs 7-DoF chunk"
+    },
+    "required_obs_keys": {
+      "value": [
+        "image_primary",
+        "image_wrist",
+        "state",
+        "lang_embed"
+      ],
+      "source": "RDT-1B architecture: img + proprio + precomputed T5 lang"
+    },
+    "obs_wrapper": {
+      "value": "flat_dict",
+      "source": "RDT server consumes flat dict"
+    }
+  }
+}

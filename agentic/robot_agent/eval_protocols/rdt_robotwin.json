@@ -1,0 +1,93 @@
+{
+  "policy": "rdt",
+  "benchmark": "robotwin",
+  "checkpoint": "/mnt/vast/workspaces/JAIF/dy/datasets/agent_robot/checkpoints/robotwin_ckpts/robotwin2_click_bell_RDT_step15k",
+  "eval_repo": null,
+  "paper_url": null,
+  "fields": {
+    "image_resolution": {
+      "value": 384,
+      "source": "RDT-1B SigLIP vision encoder patch14-384"
+    },
+    "max_episode_steps": {
+      "value": 300,
+      "source": "RoboTwin 2.0 default step_lim"
+    },
+    "camera": {
+      "value": "RoboTwin 3-camera: cam_high (head) + cam_left_wrist + cam_right_wrist",
+      "source": "RoboTwin/policy/RDT/model.py config camera_names"
+    },
+    "control_mode": {
+      "value": "joint_position",
+      "source": "RoboTwin ALOHA bimanual joint control"
+    },
+    "obs_mode": {
+      "value": "rgb",
+      "source": "RoboTwin default"
+    },
+    "prompt_format": {
+      "value": "<plain text>",
+      "source": "RDT T5-XXL encodes plain instructions"
+    },
+    "image_flip_180deg": {
+      "value": false,
+      "source": "RoboTwin upright cameras"
+    },
+    "resize_method": {
+      "value": "bicubic",
+      "source": "SigLIP default"
+    },
+    "image_resize_before_model": {
+      "value": false,
+      "source": "SigLIP image processor handles 384"
+    },
+    "center_crop": {
+      "value": false,
+      "source": "RDT training convention no center_crop"
+    },
+    "gripper_post_processing": {
+      "value": "raw 14D joint output + 2 grippers = 16D total in RDT state_dim, but RoboTwin action is 14D bimanual joints",
+      "source": "RoboTwin/policy/RDT/model.py state_dim = left_arm_dim+1+right_arm_dim+1 (16D); client downsamples"
+    },
+    "wait_steps": {
+      "value": 0,
+      "source": "RoboTwin ws client no warmup"
+    },
+    "unnorm_key": {
+      "value": "__none__",
+      "source": "RDT-1B uses MEAN/STD from config.base.yaml, not an index key"
+    },
+    "state_dim": {
+      "value": 14,
+      "source": "RoboTwin sends 14D bimanual qpos; RDT padded internally to 128D state_vec"
+    },
+    "action_dim": {
+      "value": 14,
+      "source": "RoboTwin take_action accepts 14D bimanual; RDT decodes 128D\u219214D via MANISKILL_INDICES-like mapping (bimanual)"
+    },
+    "required_obs_keys": {
+      "value": [
+        "cam_high",
+        "cam_left_wrist",
+        "cam_right_wrist",
+        "state"
+      ],
+      "source": "RDT maniskill_model.py encodes 3-camera + proprio"
+    },
+    "obs_wrapper": {
+      "value": "flat_dict",
+      "source": "RDT server expects flat dict"
+    },
+    "train_seed_range": {
+      "value": "unknown",
+      "source": "ckpt dir 'robotwin2_click_bell_RDT_step15k' has no seed<N>k / seeds_<lo>_<hi> marker; assumed full seed space \u2014 overlap gate will skip"
+    },
+    "eval_seed_range": {
+      "value": {
+        "start": 100000,
+        "end": 100003
+      },
+      "source": "RoboTwin/script/run_eval_ws.py:180 `now_seed = 100000 * (1 + args.seed)` (default --seed 0 \u2192 base 100000); num_trials=3"
+    }
+  }
+}

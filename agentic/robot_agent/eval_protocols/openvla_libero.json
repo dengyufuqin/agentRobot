@@ -1,0 +1,81 @@
+{
+  "policy": "openvla",
+  "benchmark": "libero",
+  "checkpoint": "/mnt/vast/workspaces/JAIF/dy/datasets/agent_robot/checkpoints/openvla-maniskill",
+  "eval_repo": null,
+  "paper_url": null,
+  "fields": {
+    "image_resolution": {
+      "value": 224,
+      "source": "openvla_utils.OPENVLA_IMAGE_SIZE=224; LIBERO agentview_image is 256 \u2192 resized to 224 before model"
+    },
+    "max_episode_steps": {
+      "value": 220,
+      "source": "LIBERO benchmark spec: libero_spatial/object/goal=220 steps; libero_10/90=520 steps (set per-suite in eval harness)"
+    },
+    "camera": {
+      "value": "LIBERO agentview (primary) + robot0_eye_in_hand_image (wrist)",
+      "source": "moojink eval: num_images_in_input=2 (primary+wrist); LIBERO env default cameras"
+    },
+    "control_mode": {
+      "value": "OSC_POSE (LIBERO default \u2014 6-DoF delta pose + gripper)",
+      "source": "LIBERO env spec; client arm_controller=cartesian_pose"
+    },
+    "obs_mode": {
+      "value": "rgb (no depth; LIBERO default)",
+      "source": "LIBERO env default observation dict"
+    },
+    "prompt_format": {
+      "value": "In: What action should the robot take to {instruction.lower()}?\\nOut:",
+      "source": "openvla/experiments/robot/openvla_utils.get_prompt_builder()"
+    },
+    "image_flip_180deg": {
+      "value": true,
+      "source": "LIBERO renders upside-down relative to training data; our remap_obs_to_libero applies 180\u00b0 flip in policy_server.py"
+    },
+    "resize_method": {
+      "value": "lanczos3",
+      "source": "openvla/experiments/robot/openvla_utils.resize_image_for_policy method='lanczos3'"
+    },
+    "image_resize_before_model": {
+      "value": true,
+      "source": "prepare_images_for_vla resizes 256\u2192224 (LIBERO agentview native 256, model expects 224)"
+    },
+    "center_crop": {
+      "value": true,
+      "source": "moojink OFT finetuning used center-crop augmentation (config.center_crop default True matches training)"
+    },
+    "gripper_post_processing": {
+      "value": "_normalize_gripper_action(binarize=True) + _invert_gripper_action  # [0,1]\u2192sign(\u00b7)\u2192flip; LIBERO env: -1=open, +1=close",
+      "source": "openvla/experiments/robot/robot_utils.py normalize_gripper_action + invert_gripper_action; LIBERO OSC_POSE convention"
+    },
+    "wait_steps": {
+      "value": 10,
+      "source": "LIBERO eval standard: 10 zero-action steps for objects to settle before policy starts (from robosuite convention)"
+    },
+    "unnorm_key": {
+      "value": "libero_spatial_no_noops (or _object, _goal, _10 per suite)",
+      "source": "moojink/openvla-7b-oft-finetuned-libero-{suite}/dataset_statistics.json top-level key"
+    },
+    "state_dim": {
+      "value": 8,
+      "source": "LIBERO state: eef_pos(3)+axis_angle(3)+gripper(2)"
+    },
+    "action_dim": {
+      "value": 7,
+      "source": "OpenVLA action_head 7-DoF"
+    },
+    "required_obs_keys": {
+      "value": [
+        "image_primary",
+        "image_wrist",
+        "state"
+      ],
+      "source": "moojink OFT num_images_in_input=2 + proprio"
+    },
+    "obs_wrapper": {
+      "value": "flat_dict",
+      "source": "OpenVLA processor consumes flat dict"
+    }
+  }
+}

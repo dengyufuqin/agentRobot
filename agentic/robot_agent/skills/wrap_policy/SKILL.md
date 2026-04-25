@@ -51,3 +51,20 @@ The adapter needs manual editing to:
 - Implement model loading in `__init__`
 - Map observations from client format to model format
 - Post-process model output to standard action format
+
+## Known traps
+
+### Do not use this skill for anything beyond the 6 hardcoded patterns
+**Symptom:** Any repo that doesn't match `Hydra`, `from_pretrained`,
+`algo_factory`, `load_pretrained`, `deserialize`, or explicit
+`checkpoint=` kwargs will produce a broken adapter that still passes
+the regex, fails at import.
+**Fix:** Use the LLM-driven loop instead:
+```
+list_files(root=<repo>, pattern="demo*.py")   # discover
+read_file(file_path=<demo>)                   # read actual loading + predict code
+write_file(<repo>/policy_server.py, ...)      # write adapter from what was READ
+validate_policy_server(repo_path=<repo>, python=<venv>/bin/python3)
+```
+That loop works on any repo, not just the regex-matchable subset.
+[mem:feedback_wrap_policy_loop]

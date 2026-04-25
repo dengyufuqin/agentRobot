@@ -1,0 +1,81 @@
+{
+  "policy": "pi0",
+  "benchmark": "maniskill",
+  "checkpoint": "/mnt/vast/workspaces/JAIF/dy/datasets/agent_robot/checkpoints/dexmal-pi0-ms",
+  "eval_repo": null,
+  "paper_url": null,
+  "fields": {
+    "image_resolution": {
+      "value": 224,
+      "source": "dexmal-pi0-ms/preprocessor_config.json size.height"
+    },
+    "max_episode_steps": {
+      "value": 300,
+      "source": "ManiSkill RPD convention"
+    },
+    "camera": {
+      "value": "HumanCameraWrapper \u2014 env.render() \u2192 base_camera",
+      "source": "Dexbotic eval uses ManiSkill human camera (matches our RPD path)"
+    },
+    "control_mode": {
+      "value": "pd_ee_delta_pose",
+      "source": "ManiSkill RPD convention"
+    },
+    "obs_mode": {
+      "value": "rgb",
+      "source": "ManiSkill default"
+    },
+    "prompt_format": {
+      "value": "<plain text instruction>  # Dexbotic PI0 uses Gemma tokenizer",
+      "source": "dexmal-pi0-ms config.json llm_config model_type=gemma"
+    },
+    "image_flip_180deg": {
+      "value": false,
+      "source": "ManiSkill human_render is upright"
+    },
+    "resize_method": {
+      "value": "bicubic",
+      "source": "SiglipImageProcessor resample=3 (bicubic)"
+    },
+    "image_resize_before_model": {
+      "value": true,
+      "source": "preprocessor_config do_resize=true to 224"
+    },
+    "center_crop": {
+      "value": false,
+      "source": "preprocessor_config: no do_center_crop flag"
+    },
+    "gripper_post_processing": {
+      "value": "action chunk final dim; binarize per Dexbotic playground/maniskill2_pi0.py",
+      "source": "Dexmal/Dexbotic-PI0 maniskill2_pi0.py benchmark config"
+    },
+    "wait_steps": {
+      "value": 10,
+      "source": "ManiSkill harness default"
+    },
+    "unnorm_key": {
+      "value": "default",
+      "source": "dexmal-pi0-ms/norm_stats.json top-level key"
+    },
+    "state_dim": {
+      "value": 8,
+      "source": "Dexbotic-PI0 ManiSkill proprio: eef+quat+gripper"
+    },
+    "action_dim": {
+      "value": 7,
+      "source": "Dexbotic pi0 action decoder 7-DoF"
+    },
+    "required_obs_keys": {
+      "value": [
+        "image",
+        "wrist_image",
+        "state"
+      ],
+      "source": "Dexbotic maniskill2_pi0.py obs format"
+    },
+    "obs_wrapper": {
+      "value": "flat_dict",
+      "source": "Dexbotic/openpi server flat dict"
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "policy": "pi0.5",
+  "benchmark": "maniskill",
+  "checkpoint": "/mnt/vast/workspaces/JAIF/dy/datasets/agent_robot/checkpoints/pi05-maniskill",
+  "eval_repo": null,
+  "paper_url": null,
+  "fields": {
+    "image_resolution": {
+      "value": 224,
+      "source": "lerobot pi0.5 preprocessor_config size.height=224"
+    },
+    "max_episode_steps": {
+      "value": 300,
+      "source": "RPD-style ManiSkill convention (align with Juelg)"
+    },
+    "camera": {
+      "value": "HumanCameraWrapper \u2014 env.render() \u2192 observation.image",
+      "source": "our ManiSkill harness uses HumanCameraWrapper (matches OpenVLA/Octo RPD path)"
+    },
+    "control_mode": {
+      "value": "pd_ee_delta_pose",
+      "source": "ManiSkill RPD convention"
+    },
+    "obs_mode": {
+      "value": "rgb",
+      "source": "ManiSkill default"
+    },
+    "prompt_format": {
+      "value": "<plain text instruction>  # PaliGemma tokenizer",
+      "source": "lerobot Pi0.5 tokenizer.apply_chat_template"
+    },
+    "image_flip_180deg": {
+      "value": false,
+      "source": "ManiSkill human_render is upright"
+    },
+    "resize_method": {
+      "value": "bilinear",
+      "source": "lerobot image processor default"
+    },
+    "image_resize_before_model": {
+      "value": true,
+      "source": "lerobot image_processor resizes to 224"
+    },
+    "center_crop": {
+      "value": false,
+      "source": "lerobot pi0.5 preprocessor_config: no center_crop"
+    },
+    "gripper_post_processing": {
+      "value": "LeRobot native action; [-1,+1] range, gripper last dim",
+      "source": "lerobot pi0.5 action decoder output"
+    },
+    "wait_steps": {
+      "value": 10,
+      "source": "ManiSkill harness default"
+    },
+    "unnorm_key": {
+      "value": "physical-intelligence/maniskill",
+      "source": "lerobot pi05_maniskill assets/physical-intelligence/maniskill/norm_stats.json"
+    },
+    "state_dim": {
+      "value": 8,
+      "source": "pi0.5 ManiSkill proprio: eef+quat+gripper (openpi maniskill config)"
+    },
+    "action_dim": {
+      "value": 7,
+      "source": "pi0.5 ManiSkill action decoder 7-DoF"
+    },
+    "required_obs_keys": {
+      "value": [
+        "observation/image",
+        "observation/wrist_image",
+        "observation/state"
+      ],
+      "source": "openpi pi05_maniskill config observation/* keys"
+    },
+    "obs_wrapper": {
+      "value": "flat_dict",
+      "source": "openpi server flat dict"
+    }
+  }
+}

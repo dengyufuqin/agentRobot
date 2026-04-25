@@ -1,0 +1,98 @@
+{
+  "policy": "openvla-oft",
+  "benchmark": "robotwin",
+  "checkpoint": "/mnt/vast/workspaces/JAIF/dy/datasets/agent_robot/checkpoints/robotwin_ckpts/robotwin2_stack_bowls_two_seed1k_sft_aloha_25chunks_40k",
+  "eval_repo": null,
+  "paper_url": null,
+  "fields": {
+    "image_resolution": {
+      "value": "[MANUAL]",
+      "source": ""
+    },
+    "max_episode_steps": {
+      "value": "[MANUAL]",
+      "source": ""
+    },
+    "camera": {
+      "value": "[MANUAL]",
+      "source": ""
+    },
+    "control_mode": {
+      "value": "[MANUAL]",
+      "source": ""
+    },
+    "obs_mode": {
+      "value": "[MANUAL]",
+      "source": ""
+    },
+    "prompt_format": {
+      "value": "[MANUAL]",
+      "source": ""
+    },
+    "image_flip_180deg": {
+      "value": "[MANUAL]",
+      "source": ""
+    },
+    "resize_method": {
+      "value": "[MANUAL]",
+      "source": ""
+    },
+    "image_resize_before_model": {
+      "value": "[MANUAL]",
+      "source": ""
+    },
+    "center_crop": {
+      "value": "[MANUAL]",
+      "source": ""
+    },
+    "gripper_post_processing": {
+      "value": "[MANUAL]",
+      "source": ""
+    },
+    "wait_steps": {
+      "value": "[MANUAL]",
+      "source": ""
+    },
+    "unnorm_key": {
+      "value": "stack_bowls_two_1k",
+      "source": "robotwin2_stack_bowls_two_seed1k_sft_aloha_25chunks_40k/dataset_statistics.json top-level key"
+    },
+    "state_dim": {
+      "value": "[MANUAL]",
+      "source": ""
+    },
+    "action_dim": {
+      "value": "[MANUAL]",
+      "source": ""
+    },
+    "required_obs_keys": {
+      "value": "[MANUAL]",
+      "source": ""
+    },
+    "obs_wrapper": {
+      "value": "[MANUAL]",
+      "source": ""
+    },
+    "train_seed_range": {
+      "value": {
+        "start": 0,
+        "end": 1000
+      },
+      "source": "parsed from ckpt dir name 'robotwin2_stack_bowls_two_seed1k_sft_aloha_25chunks_40k' (seed<N>k \u2192 [0, N*1000))"
+    },
+    "eval_seed_range": {
+      "value": {
+        "start": 0,
+        "end": 3
+      },
+      "source": "RoboTwin/script/run_eval_ws.py:180 `now_seed = 100000 * (1 + args.seed)` (default --seed 0 \u2192 base 100000); num_trials=3; auto-shifted via --seed_base 0"
+    },
+    "recommended_client_flags": {
+      "value": [
+        "--seed_base",
+        "0"
+      ],
+      "source": "auto-fix: train_seed_range [0,1000) and default eval_seed_range [100000,100003) are disjoint. Shifting eval base to 0 via `--seed_base 0` so the first 3 episodes fall inside the trained seed range."
+    }
+  }
+}

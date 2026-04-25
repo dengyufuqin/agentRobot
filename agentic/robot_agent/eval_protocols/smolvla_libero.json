@@ -1,0 +1,81 @@
+{
+  "policy": "smolvla",
+  "benchmark": "libero",
+  "checkpoint": "/mnt/vast/workspaces/JAIF/dy/datasets/agent_robot/checkpoints/smolvla-libero",
+  "eval_repo": null,
+  "paper_url": null,
+  "fields": {
+    "image_resolution": {
+      "value": 512,
+      "source": "lerobot smolvla preprocessor size=512 (SmolVLM)"
+    },
+    "max_episode_steps": {
+      "value": 220,
+      "source": "LIBERO spec"
+    },
+    "camera": {
+      "value": "observation.image (agentview) + observation.image.wrist",
+      "source": "lerobot smolvla config \u2014 observation-prefixed keys"
+    },
+    "control_mode": {
+      "value": "OSC_POSE",
+      "source": "LIBERO default"
+    },
+    "obs_mode": {
+      "value": "rgb",
+      "source": "LIBERO default"
+    },
+    "prompt_format": {
+      "value": "<plain text instruction>  # SmolVLM tokenizer",
+      "source": "lerobot smolvla tokenizer.apply_chat_template"
+    },
+    "image_flip_180deg": {
+      "value": true,
+      "source": "LIBERO agentview is upside-down (same as pi0/pi0.5)"
+    },
+    "resize_method": {
+      "value": "bilinear",
+      "source": "lerobot default"
+    },
+    "image_resize_before_model": {
+      "value": true,
+      "source": "lerobot resizes to 512"
+    },
+    "center_crop": {
+      "value": false,
+      "source": "lerobot smolvla preprocessor: no center_crop"
+    },
+    "gripper_post_processing": {
+      "value": "8D state; LIBERO convention -1=open",
+      "source": "lerobot smolvla LIBERO finetune config"
+    },
+    "wait_steps": {
+      "value": 10,
+      "source": "LIBERO eval standard"
+    },
+    "unnorm_key": {
+      "value": "aopoli-lv-libero_combined_no_noops",
+      "source": "smolvla-libero README datasets field"
+    },
+    "state_dim": {
+      "value": 8,
+      "source": "smolvla-libero/config.json input_features['observation.state'].shape[0]"
+    },
+    "action_dim": {
+      "value": 7,
+      "source": "smolvla-libero/config.json output_features['action'].shape[0]"
+    },
+    "required_obs_keys": {
+      "value": [
+        "observation.images.image",
+        "observation.images.wrist_image",
+        "observation.state"
+      ],
+      "source": "smolvla-libero/config.json input_features.keys()"
+    },
+    "obs_wrapper": {
+      "value": "env_transition",
+      "source": "config.json type=smolvla \u2014 lerobot VLM preprocessor needs complementary_data[\"task\"] for tokenization"
+    }
+  }
+}

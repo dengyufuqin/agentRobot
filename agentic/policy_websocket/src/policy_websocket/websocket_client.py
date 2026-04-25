@@ -53,7 +53,7 @@ class WebsocketClientPolicy(_base_policy.BasePolicy):
                 conn = websockets.sync.client.connect(
                     self._uri, compression=None, max_size=None,
                     additional_headers=headers,
-                    ping_timeout=300,  # 5 min — first inference may JIT-compile
+                    ping_interval=None,  # disable pings — server may be JIT-compiling for 10+ min
                     close_timeout=60,
                 )
                 metadata = msgpack_numpy.unpackb(conn.recv())

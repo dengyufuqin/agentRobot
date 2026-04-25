@@ -1,0 +1,81 @@
+{
+  "policy": "pi0fast",
+  "benchmark": "robocasa",
+  "checkpoint": "/mnt/vast/workspaces/JAIF/dy/datasets/agent_robot/checkpoints/pi0fast-robocasa",
+  "eval_repo": null,
+  "paper_url": null,
+  "fields": {
+    "image_resolution": {
+      "value": 224,
+      "source": "lerobot pi0fast preprocessor size=224"
+    },
+    "max_episode_steps": {
+      "value": 500,
+      "source": "RoboCasa benchmark spec \u2014 atomic tasks 500 steps (RoboCasa paper \u00a73)"
+    },
+    "camera": {
+      "value": "observation.images.robot0_robotview + wrist",
+      "source": "RoboCasa env default + lerobot pi0fast_robocasa config"
+    },
+    "control_mode": {
+      "value": "OSC_POSE",
+      "source": "RoboCasa default; arm_controller=cartesian_pose"
+    },
+    "obs_mode": {
+      "value": "rgb",
+      "source": "RoboCasa default"
+    },
+    "prompt_format": {
+      "value": "<plain text instruction>  # pi0-FAST uses PaliGemma+FAST tokenizer",
+      "source": "lerobot Pi0FastPolicy forward \u2014 apply_chat_template on raw instruction"
+    },
+    "image_flip_180deg": {
+      "value": false,
+      "source": "RoboCasa renders upright"
+    },
+    "resize_method": {
+      "value": "bilinear",
+      "source": "lerobot image processor default"
+    },
+    "image_resize_before_model": {
+      "value": true,
+      "source": "lerobot resizes to 224"
+    },
+    "center_crop": {
+      "value": false,
+      "source": "lerobot pi0fast preprocessor: no center_crop"
+    },
+    "gripper_post_processing": {
+      "value": "gripper last dim; FAST token decode to continuous action",
+      "source": "lerobot pi0fast action decoder"
+    },
+    "wait_steps": {
+      "value": 10,
+      "source": "RoboCasa harness default"
+    },
+    "unnorm_key": {
+      "value": "physical-intelligence/robocasa",
+      "source": "lerobot pi0fast_robocasa assets/physical-intelligence/robocasa/norm_stats.json"
+    },
+    "state_dim": {
+      "value": 16,
+      "source": "pi0fast RoboCasa trained dual-arm 16D state (pi0fast paper)"
+    },
+    "action_dim": {
+      "value": 7,
+      "source": "pi0fast action decoder (FAST tokens \u2192 7D chunk)"
+    },
+    "required_obs_keys": {
+      "value": [
+        "observation/image",
+        "observation/wrist_image",
+        "observation/state"
+      ],
+      "source": "openpi pi0fast_robocasa config observation/* keys"
+    },
+    "obs_wrapper": {
+      "value": "flat_dict",
+      "source": "openpi server flat dict"
+    }
+  }
+}

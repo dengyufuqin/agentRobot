@@ -1,0 +1,93 @@
+{
+  "policy": "act",
+  "benchmark": "robotwin",
+  "checkpoint": "/mnt/vast/workspaces/JAIF/dy/datasets/agent_robot/checkpoints/robotwin_ckpts/act_avada11_beat_block_hammer/beat_block_hammer.click_bell/demo_clean-100/100",
+  "eval_repo": "https://github.com/TianxingChen/RoboTwin (policy/ACT)",
+  "paper_url": "RoboTwin 2.0 paper (https://robotwin-platform.github.io/) ACT baseline",
+  "fields": {
+    "image_resolution": {
+      "value": 640,
+      "source": "RoboTwin/policy/ACT/act_policy.py resizes to (480,640) HWC; resnet18 backbone consumes 480x640 directly"
+    },
+    "max_episode_steps": {
+      "value": 300,
+      "source": "RoboTwin 2.0 default step_lim for Easy tasks"
+    },
+    "camera": {
+      "value": "RoboTwin 3-camera: cam_high (head) + cam_left_wrist + cam_right_wrist",
+      "source": "RoboTwin/policy/ACT/deploy_policy.yml camera_names = [cam_high, cam_right_wrist, cam_left_wrist]"
+    },
+    "control_mode": {
+      "value": "joint_position",
+      "source": "RoboTwin ALOHA bimanual joint-pos control; ACT predicts qpos targets"
+    },
+    "obs_mode": {
+      "value": "rgb",
+      "source": "RoboTwin default; ACT trained on RGB cameras"
+    },
+    "prompt_format": {
+      "value": "__none__",
+      "source": "ACT is non-language-conditioned (DETR-CVAE on images + qpos only)"
+    },
+    "image_flip_180deg": {
+      "value": false,
+      "source": "RoboTwin upright cameras; no flip needed"
+    },
+    "resize_method": {
+      "value": "bilinear",
+      "source": "policy_server _to_chw_norm uses cv2.INTER_LINEAR"
+    },
+    "image_resize_before_model": {
+      "value": true,
+      "source": "policy_server resizes HWC -> (480,640) then CHW /255 before sending to ACT"
+    },
+    "center_crop": {
+      "value": false,
+      "source": "ACT training in RoboTwin uses no center_crop"
+    },
+    "gripper_post_processing": {
+      "value": "raw 14D bimanual qpos (left arm 6+1 + right arm 6+1)",
+      "source": "Avada11 ACT trained on 14D bimanual joint-pos; no special gripper rescaling"
+    },
+    "wait_steps": {
+      "value": 0,
+      "source": "RoboTwin ws client no warmup"
+    },
+    "unnorm_key": {
+      "value": "__none__",
+      "source": "ACT uses dataset_stats.pkl mean/std loaded from ckpt_dir; not an index key"
+    },
+    "state_dim": {
+      "value": 14,
+      "source": "RoboTwin sends 14D bimanual qpos; ACT state_dim=14 from deploy_policy.yml action_dim"
+    },
+    "action_dim": {
+      "value": 14,
+      "source": "RoboTwin take_action accepts 14D; ACT predicts 14D action chunks"
+    },
+    "required_obs_keys": {
+      "value": [
+        "robotwin_head_image",
+        "robotwin_left_wrist_image",
+        "robotwin_right_wrist_image",
+        "robotwin_qpos_vector"
+      ],
+      "source": "policy_server.py _convert_obs maps these client keys to upstream {head_cam,left_cam,right_cam,qpos}"
+    },
+    "obs_wrapper": {
+      "value": "flat_dict",
+      "source": "RoboTwin run_eval_ws.py emits flat dict on the wire"
+    },
+    "train_seed_range": {
+      "value": "100,200,300 (training seed labels per dir; not RoboTwin scene seeds)",
+      "source": "Avada11/RoboTwin-Model-AgileX-ACT subdirs <pretrain>.<eval>/demo_clean-100/{100,200,300}/ — these are model training seeds, orthogonal to RoboTwin eval seeds (100000+)"
+    },
+    "eval_seed_range": {
+      "value": {
+        "start": 100000,
+        "end": 100003
+      },
+      "source": "RoboTwin/script/run_eval_ws.py:180 `now_seed = 100000 * (1 + args.seed)` (default --seed 0 \u2192 base 100000); num_trials=3"
+    }
+  }
+}

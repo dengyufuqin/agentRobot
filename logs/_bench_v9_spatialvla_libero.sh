@@ -28,7 +28,7 @@ echo ""
 CUDA_VISIBLE_DEVICES=0 \
 PYTHONPATH=$AGENTROBOT_ROOT/agentic/policy_websocket/src:$AGENTROBOT_ROOT/SpatialVLA \
   $AGENTROBOT_ROOT/SpatialVLA/.venv/bin/python3 $AGENTROBOT_ROOT/SpatialVLA/policy_server.py \
-  --checkpoint IPEC-COMMUNITY/spatialvla-4b-224-pt --port $PORT &
+  --checkpoint IPEC-COMMUNITY/spatialvla-4b-224-pt --unnorm_key none --port $PORT &
 PID=$!
 
 for i in $(seq 1 120); do

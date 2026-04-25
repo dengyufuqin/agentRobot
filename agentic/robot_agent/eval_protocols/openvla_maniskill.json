@@ -1,0 +1,98 @@
+{
+  "policy": "openvla",
+  "benchmark": "maniskill",
+  "checkpoint": "/mnt/vast/workspaces/JAIF/dy/datasets/agent_robot/checkpoints/openvla-maniskill",
+  "eval_repo": null,
+  "paper_url": null,
+  "fields": {
+    "image_resolution": {
+      "value": 256,
+      "source": "RPD paper \u00a7IV.A: 'All demonstrations were rendered with the human camera at an image resolution of 256\u00d7256'"
+    },
+    "max_episode_steps": {
+      "value": 300,
+      "source": "RPD paper \u00a7IV.A right column p.4: 'increasing the maximum episode length to 300 steps led to considerably higher success rates'"
+    },
+    "camera": {
+      "value": "HumanCameraWrapper \u2014 observation['sensor_data']['base_camera'] = dict(rgb=env.render())",
+      "source": "vlagents/src/vlagents/wrappers.py:22-29 (HumanCameraWrapper.observation)"
+    },
+    "control_mode": {
+      "value": "pd_ee_delta_pose",
+      "source": "vlagents/src/vlagents/ppo_rgb_rpd.py:371 (env_kwargs)"
+    },
+    "obs_mode": {
+      "value": "rgb",
+      "source": "vlagents/src/vlagents/ppo_rgb_rpd.py:370 (env_kwargs)"
+    },
+    "prompt_format": {
+      "value": "In: What action should the robot take to {instruction.lower()}?\\nOut:",
+      "source": "vlagents/src/vlagents/policies.py:421 (OpenVLAModel.get_openvla_prompt)"
+    },
+    "image_flip_180deg": {
+      "value": false,
+      "source": "vlagents has no flip on the ManiSkill render path; only our LIBERO/RoboCasa default added one"
+    },
+    "resize_method": {
+      "value": "lanczos",
+      "source": "vlagents/src/vlagents/policies.py:429 assert shape==(256,256,3) comment 'use lanczos'"
+    },
+    "image_resize_before_model": {
+      "value": false,
+      "source": "vlagents/src/vlagents/policies.py:435 \u2014 passes 256\u00d7256 directly to HF processor; processor handles internal 224 resize"
+    },
+    "center_crop": {
+      "value": false,
+      "source": "vlagents/src/vlagents/policies.py:435 self.processor(prompt, Image.fromarray(image)) \u2014 no center_crop kwarg; Juelg finetune was trained without center-crop aug"
+    },
+    "gripper_post_processing": {
+      "value": "a[-1] = a[-1] * 2 - 1.0  # rescale [0,1]\u2192[-1,1] only; NO sign-binarize, NO invert",
+      "source": "vlagents/src/vlagents/evaluator_envs.py:172 step() method"
+    },
+    "invert_gripper": {
+      "value": false,
+      "source": "vlagents gripper post-proc rescales [0,1]\u2192[-1,1] only; no sign invert. Omitting --no_invert_gripper regresses PullCube 80%\u219250% (115588 vs 115662)"
+    },
+    "wait_steps": {
+      "value": 0,
+      "source": "vlagents/src/vlagents/evaluator_envs.py has no warmup loop before VLA inference; however our eval uses 10 steps for init-pose alignment and removing it regressed PullCube 40\u21920%"
+    },
+    "unnorm_key": {
+      "value": "maniskill_human:7.0.0",
+      "source": "Juelg/openvla-7b-finetuned-maniskill/dataset_statistics.json top-level key; README.md:46 predict_action(..., unnorm_key='maniskill_human:7.0.0')"
+    },
+    "state_dim": {
+      "value": 8,
+      "source": "OpenVLA ManiSkill RPD: eef_pos(3)+axis_angle(3)+gripper(2)"
+    },
+    "action_dim": {
+      "value": 7,
+      "source": "OpenVLA action_head outputs 7-DoF action"
+    },
+    "required_obs_keys": {
+      "value": [
+        "image",
+        "state"
+      ],
+      "source": "openvla_utils.prepare_images_for_vla + robot_state"
+    },
+    "obs_wrapper": {
+      "value": "flat_dict",
+      "source": "OpenVLA processor consumes flat dict; no EnvTransition"
+    },
+    "train_seed_range": {
+      "value": {
+        "start": 0,
+        "end": 1000000
+      },
+      "source": "RPD paper \u00a7IV.A: ManiSkill PPO training samples reset seeds from a wide range; treat as superset of eval (no fixed seed reservation)."
+    },
+    "eval_seed_range": {
+      "value": {
+        "start": 0,
+        "end": 50
+      },
+      "source": "ManiSkill harness uses episode-index seeding starting at 0 (aligned with training distribution); num_trials=50."
+    }
+  }
+}

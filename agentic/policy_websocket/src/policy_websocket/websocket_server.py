@@ -71,7 +71,7 @@ class WebsocketPolicyServer:
             compression=None,
             max_size=None,
             process_request=_health_check,
-            ping_timeout=300,  # 5 min — first inference may JIT-compile
+            ping_interval=None,  # disable pings — first inference may JIT-compile for 10+ min, blocking event loop
         ) as server:
             self._server = server
             logger.info("PolicyServer listening on ws://%s:%s", self._host, self._port)

@@ -1,0 +1,89 @@
+{
+  "policy": "octo",
+  "benchmark": "maniskill",
+  "checkpoint": "/mnt/vast/workspaces/JAIF/dy/datasets/agent_robot/checkpoints/octo-maniskill",
+  "eval_repo": null,
+  "paper_url": null,
+  "fields": {
+    "image_resolution": {
+      "value": 256,
+      "source": "RPD paper \u00a7IV.A: human camera render at 256\u00d7256 (same as OpenVLA finetune)"
+    },
+    "max_episode_steps": {
+      "value": 300,
+      "source": "RPD paper \u00a7IV.A: max_episode_length=300 for ManiSkill (applies to all RPD runs)"
+    },
+    "camera": {
+      "value": "HumanCameraWrapper \u2014 observation['sensor_data']['base_camera'] = dict(rgb=env.render())",
+      "source": "vlagents/src/vlagents/wrappers.py:22-29; Octo trained on same human-camera data as OpenVLA"
+    },
+    "control_mode": {
+      "value": "pd_ee_delta_pose",
+      "source": "vlagents/src/vlagents/ppo_rgb_rpd.py:371"
+    },
+    "obs_mode": {
+      "value": "rgb",
+      "source": "vlagents/src/vlagents/ppo_rgb_rpd.py:370"
+    },
+    "prompt_format": {
+      "value": "<task instruction as plain text>  # Octo uses T5 language embedding, not a template",
+      "source": "vlagents/src/vlagents/policies.py OctoModel \u2014 passes raw instruction to Octo's tokenizer"
+    },
+    "image_flip_180deg": {
+      "value": false,
+      "source": "human_camera render is upright; same as OpenVLA ManiSkill path"
+    },
+    "resize_method": {
+      "value": "lanczos",
+      "source": "Octo processes 256\u00d7256 images; matches OpenVLA/RPD image pipeline"
+    },
+    "image_resize_before_model": {
+      "value": false,
+      "source": "Octo accepts 256\u00d7256 native (primary=256, wrist=128); no external resize"
+    },
+    "center_crop": {
+      "value": false,
+      "source": "Octo training on Juelg/RPD-maniskill dataset used no center-crop augmentation (matches OpenVLA finetune)"
+    },
+    "gripper_post_processing": {
+      "value": "a[-1] = a[-1] * 2 - 1.0  # rescale [0,1]\u2192[-1,1] only; NO binarize",
+      "source": "vlagents/src/vlagents/evaluator_envs.py:172 (common to all RPD eval paths)"
+    },
+    "wait_steps": {
+      "value": 0,
+      "source": "vlagents has no warmup; our eval uses 10 for init-pose alignment (empirically required \u2014 removing regresses to 0%)"
+    },
+    "unnorm_key": {
+      "value": "maniskill_human:7.0.0",
+      "source": "Juelg/octo-base-1.5-finetuned-maniskill/dataset_statistics.json top-level key"
+    },
+    "state_dim": {
+      "value": 8,
+      "source": "Octo ManiSkill proprio: eef_pos+axis_angle+gripper"
+    },
+    "action_dim": {
+      "value": 7,
+      "source": "Octo diffusion head 7-DoF"
+    },
+    "required_obs_keys": {
+      "value": [
+        "image_primary",
+        "image_wrist",
+        "state"
+      ],
+      "source": "Octo image_primary (256) + image_wrist (128) + proprio"
+    },
+    "obs_wrapper": {
+      "value": "flat_dict",
+      "source": "Octo policy consumes flat dict"
+    },
+    "train_seed_range": {
+      "value": {"start": 0, "end": 1000000},
+      "source": "RPD paper \u00a7IV.A: ManiSkill PPO training samples reset seeds from a wide range; treat as superset of eval (no fixed seed reservation)."
+    },
+    "eval_seed_range": {
+      "value": {"start": 0, "end": 50},
+      "source": "ManiSkill harness uses episode-index seeding starting at 0 (aligned with training distribution); num_trials=50."
+    }
+  }
+}

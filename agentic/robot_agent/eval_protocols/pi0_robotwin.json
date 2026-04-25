@@ -1,0 +1,82 @@
+{
+  "policy": "pi0",
+  "benchmark": "robotwin",
+  "checkpoint": "/mnt/vast/workspaces/JAIF/dy/datasets/agent_robot/checkpoints/robotwin_ckpts/pi0-robotwin-30fps-tasks5",
+  "eval_repo": null,
+  "paper_url": "https://arxiv.org/abs/2506.18088",
+  "fields": {
+    "image_resolution": {
+      "value": 224,
+      "source": "nextbig pi0-robotwin config.json resize_imgs_with_padding=[224,224]"
+    },
+    "max_episode_steps": {
+      "value": 300,
+      "source": "RoboTwin 2.0 default step_lim from _eval_step_limit.yml (typical 300)"
+    },
+    "camera": {
+      "value": "RoboTwin 3-camera: head + left_wrist + right_wrist",
+      "source": "RoboTwin task env obs keys: head_camera / left_camera / right_camera"
+    },
+    "control_mode": {
+      "value": "joint_position",
+      "source": "RoboTwin ALOHA bimanual joint-pos control"
+    },
+    "obs_mode": {
+      "value": "rgb",
+      "source": "RoboTwin default"
+    },
+    "prompt_format": {
+      "value": "<plain text instruction>",
+      "source": "lerobot pi0 tokenizer default"
+    },
+    "image_flip_180deg": {
+      "value": false,
+      "source": "RoboTwin cameras are upright"
+    },
+    "resize_method": {
+      "value": "bilinear",
+      "source": "lerobot image processor default"
+    },
+    "image_resize_before_model": {
+      "value": true,
+      "source": "lerobot pi0 resizes to 224"
+    },
+    "center_crop": {
+      "value": false,
+      "source": "lerobot pi0 preprocessor_config: no center_crop"
+    },
+    "gripper_post_processing": {
+      "value": "raw joint action passthrough (no gripper rescaling for joint_position control)",
+      "source": "RoboTwin ALOHA joint-pos has explicit gripper joints in 14D vector"
+    },
+    "wait_steps": {
+      "value": 0,
+      "source": "RoboTwin ws client has no warmup"
+    },
+    "unnorm_key": {
+      "value": "__none__",
+      "source": "lerobot pi0 uses per-dataset MEAN_STD normalization from preprocessor_config, not unnorm_key index"
+    },
+    "state_dim": {
+      "value": 14,
+      "source": "RoboTwin bimanual proprio: 2x(7-DoF arm joints) = 14"
+    },
+    "action_dim": {
+      "value": 14,
+      "source": "RoboTwin bimanual action: 2x7 joint positions"
+    },
+    "required_obs_keys": {
+      "value": [
+        "observation.images.cam_high",
+        "observation.images.cam_left_wrist",
+        "observation.images.cam_right_wrist",
+        "observation.state"
+      ],
+      "source": "nextbig pi0-robotwin train_config.json input_features"
+    },
+    "obs_wrapper": {
+      "value": "flat_dict",
+      "source": "lerobot server flat dict"
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "policy": "pi0.5",
+  "benchmark": "libero",
+  "checkpoint": "lerobot/pi05_libero",
+  "eval_repo": null,
+  "paper_url": null,
+  "fields": {
+    "image_resolution": {
+      "value": 224,
+      "source": "lerobot pi0.5 preprocessor_config.json image_processor resize 224"
+    },
+    "max_episode_steps": {
+      "value": 220,
+      "source": "LIBERO spec: spatial/object/goal=220; libero_10=520"
+    },
+    "camera": {
+      "value": "observation.image (agentview) + observation.image.wrist (robot0_eye_in_hand_image)",
+      "source": "lerobot pi05_libero config \u2014 two camera keys under 'observation' prefix, not DROID keys"
+    },
+    "control_mode": {
+      "value": "OSC_POSE",
+      "source": "LIBERO env default; client arm_controller=cartesian_pose"
+    },
+    "obs_mode": {
+      "value": "rgb",
+      "source": "LIBERO env default"
+    },
+    "prompt_format": {
+      "value": "<task instruction as plain text>  # pi0.5 uses PaliGemma + tokenizer",
+      "source": "lerobot Pi0.5 forward path \u2014 tokenizer.apply_chat_template on raw instruction"
+    },
+    "image_flip_180deg": {
+      "value": true,
+      "source": "LIBERO agentview is upside-down relative to training; feedback_lerobot_libero_flip.md \u2014 pi0/pi0.5 both require flip"
+    },
+    "resize_method": {
+      "value": "bilinear",
+      "source": "lerobot image processor default (distinct from OpenVLA's lanczos3)"
+    },
+    "image_resize_before_model": {
+      "value": true,
+      "source": "lerobot image_processor resizes 256\u2192224 inside processor pipeline"
+    },
+    "center_crop": {
+      "value": false,
+      "source": "lerobot pi0.5 preprocessor_config: no do_center_crop flag; resize only"
+    },
+    "gripper_post_processing": {
+      "value": "state uses 8D (7 joint + 1 gripper); action gripper follows LIBERO convention (-1=open, +1=close) without extra binarize",
+      "source": "feedback_openpi_libero_vs_droid_obs.md \u2014 pi05_libero needs 8D state + observation/image keys, not DROID 7D+state"
+    },
+    "wait_steps": {
+      "value": 10,
+      "source": "LIBERO eval standard: 10 zero-action settle steps"
+    },
+    "unnorm_key": {
+      "value": "physical-intelligence/libero",
+      "source": "lerobot pi05_libero assets/physical-intelligence/libero/norm_stats.json; openpi route_openpi_config 'pi05_libero' \u2192 'libero' asset"
+    },
+    "state_dim": {
+      "value": 8,
+      "source": "pi0.5 LIBERO: 7 joint + 1 gripper (feedback_openpi_libero_vs_droid_obs)"
+    },
+    "action_dim": {
+      "value": 7,
+      "source": "pi0.5 LIBERO action decoder 7-DoF"
+    },
+    "required_obs_keys": {
+      "value": [
+        "observation/image",
+        "observation/wrist_image",
+        "observation/state"
+      ],
+      "source": "openpi pi05_libero config observation/* keys"
+    },
+    "obs_wrapper": {
+      "value": "flat_dict",
+      "source": "openpi server consumes flat dict (not EnvTransition); tokenization handled in server"
+    }
+  }
+}

@@ -21,6 +21,13 @@
 !SpatialVLA/policy_server.py
 !RDT/
 !RDT/policy_server.py
+!RoboTwin/policy/
+!RoboTwin/policy/ACT/
+!RoboTwin/policy/ACT/policy_server.py
+!RoboTwin/policy/ACT/setup_env.sh
+!RoboTwin/policy/DP/
+!RoboTwin/policy/DP/policy_server.py
+!RoboTwin/policy/DP/setup_env.sh
 
 # Eval scripts (our harness)
 !LIBERO/

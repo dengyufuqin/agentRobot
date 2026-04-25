@@ -1,0 +1,101 @@
+{
+  "policy": "dp",
+  "benchmark": "robotwin",
+  "checkpoint": "/mnt/vast/workspaces/JAIF/dy/datasets/agent_robot/checkpoints/robotwin_ckpts/dp_avada11_beat_block_hammer/500.ckpt",
+  "eval_repo": "https://github.com/TianxingChen/RoboTwin (policy/DP)",
+  "paper_url": "RoboTwin 2.0 paper Diffusion Policy baseline (https://robotwin-platform.github.io/)",
+  "fields": {
+    "image_resolution": {
+      "value": 320,
+      "source": "RoboTwin DP trains on raw camera resolution (no explicit resize); images stay HWC->CHW /255 in deploy_policy.encode_obs"
+    },
+    "max_episode_steps": {
+      "value": 300,
+      "source": "RoboTwin 2.0 default step_lim for Easy tasks (matches DPRunner.max_steps)"
+    },
+    "camera": {
+      "value": "RoboTwin 3-camera: head_camera + left_camera + right_camera (also referenced as head_cam/left_cam/right_cam in obs dict)",
+      "source": "RoboTwin/policy/DP/diffusion_policy/env_runner/dp_runner.py builds obs_dict_input with head_cam/left_cam/right_cam keys"
+    },
+    "control_mode": {
+      "value": "joint_position",
+      "source": "RoboTwin ALOHA bimanual joint-pos control; DP predicts qpos targets (14D)"
+    },
+    "obs_mode": {
+      "value": "rgb",
+      "source": "RoboTwin default; DP shape_meta declares rgb image obs"
+    },
+    "prompt_format": {
+      "value": "__none__",
+      "source": "Diffusion Policy is non-language-conditioned (UNet on stacked image+state)"
+    },
+    "image_flip_180deg": {
+      "value": false,
+      "source": "RoboTwin upright cameras; no flip needed"
+    },
+    "resize_method": {
+      "value": "none",
+      "source": "deploy_policy.encode_obs does no resize; obs encoder uses random_crop=True at training time"
+    },
+    "image_resize_before_model": {
+      "value": false,
+      "source": "DP receives raw H x W images; obs encoder handles internal preprocessing"
+    },
+    "center_crop": {
+      "value": false,
+      "source": "DP training uses random_crop (group norm + imagenet_norm); inference passes through"
+    },
+    "gripper_post_processing": {
+      "value": "raw 14D bimanual qpos (left_arm_dim + right_arm_dim + 2 grippers)",
+      "source": "deploy_policy.get_model: action_dim = left_arm_dim + right_arm_dim + 2"
+    },
+    "wait_steps": {
+      "value": 0,
+      "source": "RoboTwin ws client no warmup"
+    },
+    "unnorm_key": {
+      "value": "__none__",
+      "source": "DP uses LinearNormalizer fit at training time, stored inside the ckpt; no external key"
+    },
+    "state_dim": {
+      "value": 14,
+      "source": "RoboTwin sends 14D bimanual qpos; DP shape_meta agent_pos.shape=[14] in robot_dp_14.yaml"
+    },
+    "action_dim": {
+      "value": 14,
+      "source": "RoboTwin take_action accepts 14D; DP action.shape=[14] in robot_dp_14.yaml"
+    },
+    "required_obs_keys": {
+      "value": [
+        "robotwin_head_image",
+        "robotwin_left_wrist_image",
+        "robotwin_right_wrist_image",
+        "robotwin_qpos_vector"
+      ],
+      "source": "policy_server.py _convert_obs maps these client keys to upstream {head_cam,left_cam,right_cam,agent_pos}"
+    },
+    "obs_wrapper": {
+      "value": "flat_dict",
+      "source": "RoboTwin run_eval_ws.py emits flat dict on the wire"
+    },
+    "n_obs_steps": {
+      "value": 3,
+      "source": "robot_dp_14.yaml n_obs_steps=3"
+    },
+    "n_action_steps": {
+      "value": 6,
+      "source": "robot_dp_14.yaml n_action_steps=6"
+    },
+    "train_seed_range": {
+      "value": "100,200,300,400,500 (training seed labels per dir; not RoboTwin scene seeds)",
+      "source": "Avada11/RoboTwin-Model-AgileX-DP subdirs <task>-demo_clean-100/{100..500}/<epoch>.ckpt — model training seeds, orthogonal to RoboTwin eval seeds (100000+)"
+    },
+    "eval_seed_range": {
+      "value": {
+        "start": 100000,
+        "end": 100003
+      },
+      "source": "RoboTwin/script/run_eval_ws.py:180 `now_seed = 100000 * (1 + args.seed)` (default --seed 0 \u2192 base 100000); num_trials=3"
+    }
+  }
+}

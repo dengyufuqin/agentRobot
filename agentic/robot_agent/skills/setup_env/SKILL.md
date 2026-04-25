@@ -162,3 +162,16 @@ Supports repos with `pyproject.toml`, `requirements.txt`, or `setup.py`.
 Always installs `policy_websocket` as an editable dependency for policy server integration.
 
 Use `no_deps_install=true` when the repo has strict version pinning that conflicts with other packages.
+
+## Known traps
+
+### JAX on H100 needs `nvidia-cuda-nvcc-cu12` (ptxas binary)
+**Symptom:** Octo/any-JAX repo fails at first JIT with
+`FAILED_PRECONDITION: Couldn't invoke ptxas --version`.
+**Fix:** `pip install nvidia-cuda-nvcc-cu12` in the target venv, then in
+the SLURM script (or `extra_deps`) export:
+```
+export PATH=$AGENTROBOT_ROOT/<repo>/.venv/lib/python3.10/site-packages/nvidia/cuda_nvcc/bin:$PATH
+```
+The hessian.AI 43 cluster has drivers but no CUDA toolkit system-wide.
+[mem:feedback_octo_ptxas]

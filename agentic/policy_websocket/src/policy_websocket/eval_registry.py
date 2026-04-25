@@ -318,6 +318,363 @@ for model in ["openvla", "pi0", "pi0.5", "octo", "spatialvla", "smolvla"]:
     ))
 
 
+# ---------------------------------------------------------------------------
+#  ManiSkill READY entries — locally finetuned checkpoints in agent_robot datasets
+#  Published baselines come from the RPD paper (arXiv 2503.05833) where
+#  Juelg/OpenVLA-7B-finetuned-maniskill and Juelg/Octo-base-1.5-finetuned-maniskill
+#  were released. pi0.5 ManiSkill checkpoint is our own finetune.
+#  These override the earlier CROSS_DOMAIN entries (last write wins).
+# ---------------------------------------------------------------------------
+_LOCAL_CKPT_ROOT = "/mnt/vast/workspaces/JAIF/dy/datasets/agent_robot/checkpoints"
+
+_reg(EvalConfig(
+    policy_name="octo",
+    benchmark="maniskill",
+    readiness=Readiness.READY,
+    checkpoint=f"{_LOCAL_CKPT_ROOT}/octo-maniskill",
+    checkpoint_note="Octo-base-1.5 finetuned on ManiSkill (RPD paper). Top-level dir (has config.json); step weights live under 60000/default/.",
+    server_script="octo/policy_server.py",
+    server_args={"--checkpoint": f"{_LOCAL_CKPT_ROOT}/octo-maniskill"},
+    control_mode="pd_ee_delta_pose",
+    action_dim=7,
+    known_issues=[
+        "Path MUST be top-level ckpt dir, NOT /60000 — config.json lives at top, weights at 60000/default/.",
+        "Outputs are unbounded; clipped to [-1,1] in policy_server.py.",
+    ],
+    expected_success_rate=0.52,
+    expected_source="RPD paper (2503.05833) Table 2",
+))
+
+_reg(EvalConfig(
+    policy_name="openvla",
+    benchmark="maniskill",
+    readiness=Readiness.READY,
+    checkpoint=f"{_LOCAL_CKPT_ROOT}/openvla-maniskill",
+    checkpoint_note="OpenVLA-7B finetuned on ManiSkill (Juelg, RPD paper).",
+    server_script="openvla/vla-scripts/policy_server.py",
+    server_args={
+        "--pretrained_checkpoint": f"{_LOCAL_CKPT_ROOT}/openvla-maniskill",
+        "--unnorm_key": "maniskill_human:7.0.0",
+        "--num_images_in_input": "1",
+        "--no_proprio": "",
+    },
+    control_mode="pd_ee_delta_pose",
+    action_dim=7,
+    known_issues=[
+        "Older modeling_prismatic.py without self.llm_dim → policy_server.py falls back to config.text_config.hidden_size.",
+        "Base OpenVLA (no OFT action_head/proprio) → server auto-falls back to discrete-token decoding.",
+        "unnorm_key must be 'maniskill_human:7.0.0' (not libero_spatial_no_noops default).",
+    ],
+    expected_success_rate=0.65,
+    expected_source="RPD paper (2503.05833) Table 2",
+))
+
+_reg(EvalConfig(
+    policy_name="pi0.5",
+    benchmark="maniskill",
+    readiness=Readiness.READY,
+    checkpoint=f"{_LOCAL_CKPT_ROOT}/pi05-maniskill",
+    checkpoint_note="pi0.5 finetuned on ManiSkill (local, safetensors format).",
+    server_script="lerobot/policy_server.py",
+    server_args={"--checkpoint": f"{_LOCAL_CKPT_ROOT}/pi05-maniskill"},
+    control_mode="pd_ee_delta_pose",
+    action_dim=7,
+    known_issues=[
+        "ManiSkill obs must include robot0_joint_pos for DROID-format conversion (patched in ManiSkill/mani_skill/utils/run_utils.py).",
+    ],
+    expected_success_rate=0.80,
+    expected_source="Internal target (matches pi0.5 LIBERO published 97.5%)",
+))
+
+
+# ---------------------------------------------------------------------------
+#  RoboTwin READY entries — community-released fine-tuned checkpoints on
+#  RoboTwin 2.0. The RoboTwin authors did NOT publish per-task ckpts; the
+#  ones below are third-party HuggingFace uploads. Paper leaderboard for
+#  reference: robotwin-platform.github.io/leaderboard.
+# ---------------------------------------------------------------------------
+_ROBOTWIN_CKPT_ROOT = f"{_LOCAL_CKPT_ROOT}/robotwin_ckpts"
+
+# OpenVLA-OFT × robotwin:beat_block_hammer — Haozhan72/ALOHA 14D bimanual
+_reg(EvalConfig(
+    policy_name="openvla",
+    benchmark="robotwin:beat_block_hammer",
+    readiness=Readiness.READY,
+    checkpoint=f"{_ROBOTWIN_CKPT_ROOT}/robotwin2_beat_block_hammer_seed1k_sft_aloha_25chunks_10k",
+    checkpoint_note="OpenVLA-OFT 7B finetuned on RoboTwin 2.0 beat_block_hammer (Haozhan72, seed1k SFT, 10k steps). 14D bimanual ALOHA action.",
+    server_script="openvla/vla-scripts/policy_server.py",
+    server_args={
+        "--pretrained_checkpoint": f"{_ROBOTWIN_CKPT_ROOT}/robotwin2_beat_block_hammer_seed1k_sft_aloha_25chunks_10k",
+        "--unnorm_key": "beat_block_hammer_1k",
+        "--aloha": "",
+    },
+    arm_controller="joint_pos",
+    action_dim=14,
+    action_range=(-3.15, 3.15),
+    known_issues=[
+        "14D bimanual ALOHA joint-pos action. --aloha preset sets num_images_in_input=3, "
+        "use_film=True, use_proprio=True (14D), execute_steps=25, skips gripper normalize+invert, "
+        "and triggers ALOHA_CONSTANTS in prismatic/vla/constants.py.",
+        "3-camera obs: head + left wrist + right wrist (sourced from RoboTwin native keys).",
+        "unnorm_key is 'beat_block_hammer_1k' (in dataset_statistics.json).",
+    ],
+    expected_success_rate=0.30,
+    expected_source="RoboTwin 2.0 leaderboard OpenVLA-oft pending; paper OpenVLA baseline ~30% (Easy)",
+))
+
+# OpenVLA-OFT × robotwin:stack_blocks_two — Haozhan72/ALOHA 14D bimanual, 40k steps
+_reg(EvalConfig(
+    policy_name="openvla",
+    benchmark="robotwin:stack_blocks_two",
+    readiness=Readiness.READY,
+    checkpoint=f"{_ROBOTWIN_CKPT_ROOT}/robotwin2_stack_blocks_two_seed1k_sft_aloha_25chunks_40k",
+    checkpoint_note="OpenVLA-OFT 7B finetuned on RoboTwin 2.0 stack_blocks_two (Haozhan72, seed1k SFT, 40k steps). 14D bimanual ALOHA action.",
+    server_script="openvla/vla-scripts/policy_server.py",
+    server_args={
+        "--pretrained_checkpoint": f"{_ROBOTWIN_CKPT_ROOT}/robotwin2_stack_blocks_two_seed1k_sft_aloha_25chunks_40k",
+        "--unnorm_key": "stack_blocks_two_1k",
+        "--aloha": "",
+    },
+    arm_controller="joint_pos",
+    action_dim=14,
+    action_range=(-3.15, 3.15),
+    known_issues=[
+        "Same --aloha preset as beat_block_hammer: 3-camera + 14D proprio + bimanual action-pp skip.",
+        "unnorm_key is 'stack_blocks_two_1k' (in dataset_statistics.json).",
+        "Trained 4× longer than beat_block_hammer ckpt (40k vs 10k steps).",
+    ],
+    expected_success_rate=0.30,
+    expected_source="RoboTwin 2.0 leaderboard OpenVLA-oft pending; paper OpenVLA baseline ~30% (Easy)",
+))
+
+# pi0 (lerobot) × robotwin:beat_block_hammer — nextbig multi-task (5 tasks, 30fps)
+_reg(EvalConfig(
+    policy_name="pi0",
+    benchmark="robotwin:beat_block_hammer",
+    readiness=Readiness.READY,
+    checkpoint=f"{_ROBOTWIN_CKPT_ROOT}/pi0-robotwin-30fps-tasks5",
+    checkpoint_note="pi0 lerobot-format multi-task finetune on 5 RoboTwin tasks at 30fps (nextbig). max_state_dim=32, max_action_dim=32 (pi0 padding).",
+    server_script="lerobot/policy_server.py",
+    server_args={"--checkpoint": f"{_ROBOTWIN_CKPT_ROOT}/pi0-robotwin-30fps-tasks5"},
+    arm_controller="joint_pos",
+    action_dim=14,
+    action_range=(-3.15, 3.15),
+    known_issues=[
+        "Task list in ckpt not published; beat_block_hammer may or may not be one of the 5 trained tasks.",
+        "lerobot pi0 pads to 32D internally; RoboTwin adapter must provide 14D proprio.",
+    ],
+    expected_success_rate=0.46,
+    expected_source="RoboTwin 2.0 leaderboard Pi0 Easy avg 46% (aspirational — if task is in the trained subset)",
+))
+
+# RDT-1B × robotwin:click_bell — OPT12 per-task fine-tune
+_reg(EvalConfig(
+    policy_name="rdt",
+    benchmark="robotwin:click_bell",
+    readiness=Readiness.READY,
+    checkpoint=f"{_ROBOTWIN_CKPT_ROOT}/robotwin2_click_bell_RDT_step15k",
+    checkpoint_note="RDT-1B finetuned on RoboTwin 2.0 click_bell (OPT12, 15k steps). DeepSpeed ZeRO ckpt layout: pytorch_model/mp_rank_00_model_states.pt.",
+    server_script="RDT/policy_server.py",
+    server_args={
+        "--checkpoint": f"{_ROBOTWIN_CKPT_ROOT}/robotwin2_click_bell_RDT_step15k",
+        "--robotwin": "",
+    },
+    arm_controller="joint_pos",
+    action_dim=14,
+    action_range=(-3.15, 3.15),
+    known_issues=[
+        "--robotwin preset: agilex_model factory + 3-camera (cam_high/right_wrist/left_wrist) + 14D state (left 6+1 + right 6+1).",
+        "Local T5/SigLIP from robotwin_ckpts/ (no HF download at runtime).",
+        "Server auto-resolves pytorch_model/mp_rank_00_model_states.pt inside ckpt dir.",
+    ],
+    expected_success_rate=0.35,
+    expected_source="RoboTwin 2.0 leaderboard RDT Easy avg 35%",
+))
+
+# RDT-1B × robotwin:place_empty_cup — OPT12 per-task fine-tune (12k steps)
+_reg(EvalConfig(
+    policy_name="rdt",
+    benchmark="robotwin:place_empty_cup",
+    readiness=Readiness.READY,
+    checkpoint=f"{_ROBOTWIN_CKPT_ROOT}/robotwin2_place_empty_cup_RDT_step12k",
+    checkpoint_note="RDT-1B finetuned on RoboTwin 2.0 place_empty_cup (OPT12, 12k steps).",
+    server_script="RDT/policy_server.py",
+    server_args={
+        "--checkpoint": f"{_ROBOTWIN_CKPT_ROOT}/robotwin2_place_empty_cup_RDT_step12k",
+        "--robotwin": "",
+    },
+    arm_controller="joint_pos",
+    action_dim=14,
+    action_range=(-3.15, 3.15),
+    expected_success_rate=0.35,
+    expected_source="RoboTwin 2.0 leaderboard RDT Easy avg 35%",
+))
+
+
+# ---------------------------------------------------------------------------
+#  OpenVLA-OFT × RoboTwin — additional per-task entries (Haozhan72, --aloha preset)
+# ---------------------------------------------------------------------------
+def _openvla_oft_robotwin(task: str, ckpt_dir_name: str, unnorm_key: str,
+                          steps_desc: str = "seed1k SFT"):
+    _reg(EvalConfig(
+        policy_name="openvla",
+        benchmark=f"robotwin:{task}",
+        readiness=Readiness.READY,
+        checkpoint=f"{_ROBOTWIN_CKPT_ROOT}/{ckpt_dir_name}",
+        checkpoint_note=f"OpenVLA-OFT 7B finetuned on RoboTwin 2.0 {task} (Haozhan72, {steps_desc}). 14D bimanual ALOHA action.",
+        server_script="openvla/vla-scripts/policy_server.py",
+        server_args={
+            "--pretrained_checkpoint": f"{_ROBOTWIN_CKPT_ROOT}/{ckpt_dir_name}",
+            "--unnorm_key": unnorm_key,
+            "--aloha": "",
+        },
+        arm_controller="joint_pos",
+        action_dim=14,
+        action_range=(-3.15, 3.15),
+        known_issues=[
+            "--aloha preset: 3-camera + 14D proprio + bimanual action-pp skip.",
+            f"unnorm_key is '{unnorm_key}' (in dataset_statistics.json).",
+        ],
+        expected_success_rate=0.30,
+        expected_source="RoboTwin 2.0 leaderboard OpenVLA-oft pending; paper OpenVLA baseline ~30% (Easy)",
+    ))
+
+_openvla_oft_robotwin("stack_bowls_two",
+                      "robotwin2_stack_bowls_two_seed1k_sft_aloha_25chunks_40k",
+                      "stack_bowls_two_1k", "seed1k SFT, 40k steps")
+_openvla_oft_robotwin("place_empty_cup",
+                      "robotwin2_place_empty_cup_seed1k_sft_aloha_25chunks_10k",
+                      "place_empty_cup_1k", "seed1k SFT, 10k steps")
+_openvla_oft_robotwin("place_container_plate",
+                      "robotwin2_place_container_plate_seed1k_sft_aloha_25chunks_10k",
+                      "place_container_plate_1k", "seed1k SFT, 10k steps")
+_openvla_oft_robotwin("pick_dual_bottles",
+                      "pick_dual_bottles_seed1k_sft_aloha_25chunks_10k",
+                      "pick_dual_bottles_1k", "seed1k SFT, 10k steps")
+_openvla_oft_robotwin("lift_pot",
+                      "twin2_lift_pot_seed1k_sft_aloha_25chunks_20k",
+                      "lift_pot_1k", "seed1k SFT, 20k steps")
+_openvla_oft_robotwin("handover_block",
+                      "twin2_handover_block_seed1k_sft_aloha_25chunks",
+                      "handover_block_1k", "seed1k SFT")
+
+
+# ---------------------------------------------------------------------------
+#  ACT × RoboTwin — Avada11/AgileX bimanual ALOHA, per-task ckpts
+#  reference: Avada11/RoboTwin-Model-AgileX-ACT (HF), ~83.9M params, 50-step chunk
+# ---------------------------------------------------------------------------
+_reg(EvalConfig(
+    policy_name="act",
+    benchmark="robotwin:beat_block_hammer",
+    readiness=Readiness.READY,
+    checkpoint=f"{_ROBOTWIN_CKPT_ROOT}/act_avada11_beat_block_hammer/beat_block_hammer.click_bell/demo_clean-100/100",
+    checkpoint_note="ACT (DETR-CVAE, 83.9M, resnet18) finetuned on RoboTwin 2.0 beat_block_hammer (Avada11, demo_clean-100, seed 100, 6000 epochs). Single-task per-seed ckpt; dataset_stats.pkl in same dir.",
+    server_script="RoboTwin/policy/ACT/policy_server.py",
+    server_args={
+        "--checkpoint": f"{_ROBOTWIN_CKPT_ROOT}/act_avada11_beat_block_hammer/beat_block_hammer.click_bell/demo_clean-100/100",
+        "--task": "beat_block_hammer",
+        "--action_dim": "14",
+        "--chunk_size": "50",
+    },
+    arm_controller="joint_pos",
+    action_dim=14,
+    action_range=(-3.15, 3.15),
+    known_issues=[
+        "Own-venv pattern: RoboTwin/policy/ACT/.venv (torch 2.4.1+cu121, opencv-headless).",
+        "Upstream loader hardcodes policy_last.ckpt; server symlinks first policy_*.ckpt automatically.",
+        "Avada11 layout is <pretrained>.<eval>/<setting>/<seed>/policy_sim-<train_task>-...ckpt; pick the ckpt whose train_task matches the eval task.",
+    ],
+    expected_success_rate=0.40,
+    expected_source="RoboTwin 2.0 paper ACT Easy avg ~40%",
+))
+
+
+# ---------------------------------------------------------------------------
+#  DP × RoboTwin — Avada11/AgileX same-task Diffusion Policy ckpts
+#  reference: Avada11/RoboTwin-Model-AgileX-DP (HF), DDPM 100-step, resnet18
+# ---------------------------------------------------------------------------
+_reg(EvalConfig(
+    policy_name="dp",
+    benchmark="robotwin:beat_block_hammer",
+    readiness=Readiness.READY,
+    checkpoint=f"{_ROBOTWIN_CKPT_ROOT}/dp_avada11_beat_block_hammer/500.ckpt",
+    checkpoint_note="Diffusion Policy (resnet18 + 1D UNet, ~260M) finetuned on RoboTwin 2.0 beat_block_hammer (Avada11, demo_clean-100, seed 100, epoch 500). Hydra+dill ckpt, n_obs_steps=3, n_action_steps=6.",
+    server_script="RoboTwin/policy/DP/policy_server.py",
+    server_args={
+        "--checkpoint": f"{_ROBOTWIN_CKPT_ROOT}/dp_avada11_beat_block_hammer/500.ckpt",
+        "--task": "beat_block_hammer",
+        "--action_dim": "14",
+        "--n_obs_steps": "3",
+        "--n_action_steps": "6",
+    },
+    arm_controller="joint_pos",
+    action_dim=14,
+    action_range=(-3.15, 3.15),
+    known_issues=[
+        "Own-venv pattern: RoboTwin/policy/DP/.venv (torch 2.4.1+cu121, hydra==1.2.0, dill, diffusers).",
+        "Stateful: server keeps a deque of n_obs_steps+1 obs; reset() called on episode boundary.",
+        "Avada11 same-task layout: <task>-demo_clean-100/<seed>/<epoch>.ckpt (no cross-task subdir).",
+    ],
+    expected_success_rate=0.40,
+    expected_source="RoboTwin 2.0 paper Diffusion Policy Easy avg ~40%",
+))
+
+
+# ---------------------------------------------------------------------------
+#  Pi0.5 × RoboTwin — Hoshipu/30k single-ckpt + Crelf/50-task
+# ---------------------------------------------------------------------------
+# Pi0.5 × RoboTwin (Hoshipu pi05-robotwin2-clean-30k) — openpi JAX/orbax format
+# Layout: assets/{physical-intelligence/libero, robotwin2_clean_ft/norm_stats.json},
+#         params/, train_state/, _CHECKPOINT_METADATA. Top-level openpi orbax.
+# Cannot load via lerobot/policy_server.py. Needs openpi route + a pi05_robotwin
+# train_config (upstream RoboTwin/policy/pi05/src has only pi0_*_aloha_robotwin_*
+# configs, no pi05). Upstream wrapper at RoboTwin/policy/pi05/pi_model.py uses
+# openpi.policies.policy_config.create_trained_policy with robotwin_repo_id=
+# "robotwin2_clean_ft" — would need its own venv (RoboTwin/policy/pi05/.venv
+# does not exist). Keeping registered for tracking; readiness blocked until
+# the openpi route + pi05_robotwin config + venv are wired.
+_reg(EvalConfig(
+    policy_name="pi0.5",
+    benchmark="robotwin:beat_block_hammer",
+    readiness=Readiness.NEEDS_FINETUNE,
+    checkpoint=f"{_ROBOTWIN_CKPT_ROOT}/pi05-robotwin2-clean-30k",
+    checkpoint_note=(
+        "Pi0.5 RoboTwin finetune (Hoshipu, 30k). openpi JAX/orbax — needs openpi "
+        "policy_server + pi05_robotwin train_config + RoboTwin/policy/pi05/.venv."
+    ),
+    server_script="openpi/scripts/policy_server.py",
+    server_args={"--checkpoint": f"{_ROBOTWIN_CKPT_ROOT}/pi05-robotwin2-clean-30k"},
+    arm_controller="joint_pos",
+    action_dim=14,
+    action_range=(-3.15, 3.15),
+    expected_success_rate=0.50,
+    expected_source="RoboTwin 2.0 leaderboard Pi0.5 Easy avg 50%",
+))
+
+# Pi0.5 × RoboTwin 50-task democlean (Crelf) — openpi-PyTorch (train_pytorch.py)
+# Layout: 35000/{metadata.pt, model.safetensors}, README.md only. metadata.pt
+# config: name="C3I_pi05_50tasks_train_config_clean", project_name="openpi",
+# action_dim=32, action_horizon=50, pi05=True. PyTorch openpi flavour, distinct
+# from JAX flavour. Same blocker as Hoshipu — needs openpi-pytorch loader path.
+_reg(EvalConfig(
+    policy_name="pi0.5",
+    benchmark="robotwin:click_bell",
+    readiness=Readiness.NEEDS_FINETUNE,
+    checkpoint=f"{_ROBOTWIN_CKPT_ROOT}/C3I_pi05_Robotwin_50tasks_model_democlean",
+    checkpoint_note=(
+        "Pi0.5 RoboTwin 50-task democlean (Crelf, 35k). openpi-PyTorch — needs "
+        "openpi train_pytorch ckpt loader + 32D-action wiring (RoboTwin client emits 14D)."
+    ),
+    server_script="openpi/scripts/policy_server.py",
+    server_args={"--checkpoint": f"{_ROBOTWIN_CKPT_ROOT}/C3I_pi05_Robotwin_50tasks_model_democlean"},
+    arm_controller="joint_pos",
+    action_dim=14,
+    action_range=(-3.15, 3.15),
+    expected_success_rate=0.50,
+    expected_source="RoboTwin 2.0 leaderboard Pi0.5 Easy avg 50%",
+))
+
+
 # ============================================================================
 #  Lookup helpers
 # ============================================================================

@@ -229,7 +229,7 @@ The checker catches 3 pitfalls in the first 5 steps:
 If smoke test has warnings:
 - DIM MISMATCH → check/fix `--control_mode` (ManiSkill) or `--arm_controller` (LIBERO/RoboCasa)
 - SCALE TOO SMALL → check `--unnorm_key` in policy server, switch to `none` if wrong stats
-- SCALE TOO LARGE → add `np.clip(action, -1.0, 1.0)` in policy server
+- SCALE TOO LARGE → **do NOT clip in policy_server**. Check `unnormalization_statistics` is passed (Octo), correct `unnorm_key` (OpenVLA/SpatialVLA). Env's own controller clips internally; clipping in the server destroys training scale.
 - No warnings but 0% → likely cross-domain; inform user
 
 ### Step 4: Full Evaluation
@@ -244,7 +244,11 @@ Only after smoke test passes cleanly, run the full evaluation with all trials.
 - **SimplerEnv** (not raw ManiSkill) is the simulation standard for Google Robot / WidowX evaluation.
 - **ManiSkill default control mode is `pd_joint_delta_pos` (9D)**, but VLA policies output 7D Cartesian → must set `pd_ee_delta_pose`.
 - **SpatialVLA `bridge_orig` stats** compress LIBERO actions to ~0.01 → use `--unnorm_key none`.
-- **Octo diffusion head** outputs unbounded values (up to 3.9) → must clip to [-1,1].
+- **Octo sample_actions MUST receive `unnormalization_statistics`** — without it, returns standardized N(0,1) values, not physical action scale. Read `dataset_statistics.json`; finetuned ckpts are flat, pretrained are nested by dataset name.
+- **Do NOT clip Octo output to [-1,1].** Unnormalized actions legitimately exceed ±1 (training p99 ~2.6). The ManiSkill `pd_ee_delta_pose` controller clips internally — direction is preserved. Clipping in the policy server destroys the training scale and kills success rate.
+- **Octo/OpenVLA finetuned on Juelg/RPD-maniskill need HumanCameraWrapper.** Training used `env.render()` (3rd-person render_camera) overwriting `base_camera`. Missing this is a complete visual distribution shift → 0/10. Use `--use_human_camera --img_res 256` with `run_eval.py`. See `feedback_octo_maniskill_human_camera.md`.
+- **Gripper convention: RPD-maniskill dataset uses [0,1], ManiSkill env expects [-1,1].** Detect from action_stats min/max; if in [0,1], remap `action[-1] = action[-1]*2 - 1`.
+- **TASK_DESCRIPTIONS must match training prompts.** Juelg's canonical phrasings (e.g. "pull the cube towards the robot base", "pick up the cube") are in `juelg/agents` `src/vlagents/evaluator_envs.py`. Generic "complete the task" fallbacks break language-conditioned policies.
 
 ## Rules
 1. Check GPU availability before deploying (check_cluster_status)

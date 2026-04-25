@@ -38,13 +38,14 @@ Agent: analyze_repo -> read_file(policy.py) -> read_file(imitate_episodes.py)
 ┌──────────────────────▼───────────────────────────────────────┐
 │                     agent.py                                  │
 │   ReAct Loop (Claude/GPT/Qwen) + JSON fault-tolerance         │
-│   23 Skills + Auto-discovery from policy_server.yaml          │
-│   + Loop-breaker (intercepts repeated identical failures)    │
+│   36 Skills + Auto-discovery from policy_server.yaml          │
+│   + Loop-breaker (intercepts repeated identical failures)     │
+│   + exit-10 disambiguation (ambiguous ckpt/variant → ask)     │
 └──────┬─────────┬──────────┬──────────┬───────────┬───────────┘
        │         │          │          │           │
    ┌───▼──┐  ┌──▼───┐  ┌──▼───┐  ┌──▼────┐  ┌──▼─────┐
-   │ Meta │  │ Env  │  │ Eval │  │Deploy │  │ Util   │
-   │Skills│  │Skills│  │Skills│  │Skills │  │Skills  │
+   │ Meta │  │ Env  │  │ Eval │  │Deploy │  │ Valid/ │
+   │Skills│  │Skills│  │Skills│  │Skills │  │Codegen │
    └──────┘  └──────┘  └──────┘  └───────┘  └────────┘
 ```
 
@@ -306,33 +307,46 @@ model (Claude Sonnet 4.6, Claude Opus 4.6, or GPT-4o). The `edit_file`,
 `read_file`, `validate_policy_server`, and smaller-payload skills work
 reliably even with weaker models thanks to the C1/C2 robustness layer.
 
-## 23 Skills
+## 36 Skills
 
 | Category | Skill | Description |
 |----------|-------|-------------|
 | **Meta** | `analyze_repo` | Clone GitHub URL, analyze model structure and inference patterns |
-| **Meta** | `wrap_policy` | Regex generator covering 6 common loading patterns (fallback) |
+| **Meta** | `probe_run` | Run the repo's own demo with a forward-hook, capture ground-truth tensor shapes |
+| **Meta** | `extract_io_spec` | Parse `.probe_io_spec.json` → image_keys / state_keys / action_dim |
+| **Meta** | `infer_io_spec` | **Meta-skill.** Merge README regex + probe + user-fallback; exit 3 on LOW confidence |
+| **Meta** | `onboard_benchmark` | Symmetric to probe_run but for simulator repos (libero/maniskill/robocasa/calvin/simpler) |
+| **Meta** | `check_finetune_capability` | Scan a repo for existing train/finetune scripts before writing one |
 | **Meta** | `create_deploy_skill` | Auto-generate new deploy SKILL.md (self-expanding) |
-| **Meta** | `write_file` | Write a whole file (use only for new files / >50% rewrites) |
+| **Meta** | `wrap_policy` | **Deprecated.** Regex generator; kept only as fallback |
 | **Util** | `read_file` | Read any file with line numbers (paginated, capped 200KB) |
 | **Util** | `list_files` | Glob-aware listing that auto-skips `.venv` / `__pycache__` / `data/` |
+| **Util** | `write_file` | Write a whole file (use only for new files / >50% rewrites) |
 | **Util** | `edit_file` | Targeted base64 substring replacement, atomic + auto-repairs LLM glitches |
 | **Util** | `validate_policy_server` | Sandboxed syntax/import/smoke check on adapter, no GPU, <5s |
 | **Env** | `setup_env` | Create venv, install deps, CUDA auto-detect, pin torch cu121 |
 | **Env** | `fix_deps` | Auto-diagnose and fix dependency issues (15+ patterns, 50+ mappings) |
 | **Env** | `build_container` | Generate Apptainer .def files, build .sif containers |
-| **Eval** | `run_benchmark` | Multi-platform eval (LIBERO/ManiSkill/RoboTwin), 3 modes, pluggable |
-| **Cluster** | `check_cluster_status` | Local nvidia-smi or SLURM cluster status (auto-detect) |
-| **Deploy** | `deploy_openvla` | Deploy OpenVLA-OFT on GPU (local or remote) |
-| **Deploy** | `deploy_octo` | Deploy Octo model (local or remote) |
-| **Deploy** | `deploy_diffusion_policy` | Deploy Diffusion Policy (local or remote) |
-| **Deploy** | `deploy_robomimic` | Deploy Robomimic models (local or remote) |
-| **Deploy** | `deploy_beso` | Deploy BESO score-based diffusion (local or remote) |
-| **Deploy** | `deploy_dp3` | Deploy 3D Diffusion Policy (auto-discovered) |
-| **Deploy** | `deploy_openpi` | Deploy OpenPI/pi0 (auto-discovered) |
-| **Deploy** | `deploy_vq_bet` | Deploy VQ-BeT (auto-discovered) |
-| **Test** | `test_policy_connection` | Verify running server via WebSocket |
+| **Env** | `download_model` | Variant-aware HF checkpoint download; multi-candidate → exit 10 |
+| **Env** | `download_dataset` | HF dataset download with resume + size reporting |
+| **Valid** | `validate_dataset` | Detect dataset format (lerobot/parquet/webdataset/zarr/rlds) |
+| **Valid** | `generate_dataloader` | Emit a starter `make_dataloader()` factory for a detected format |
+| **Valid** | `validate_dataloader` | Pull 1–2 batches from a factory; shape/dtype/finite/missing-keys check |
+| **Eval** | `run_benchmark` | Multi-platform eval (LIBERO/ManiSkill/RoboTwin/RoboCasa); registry + HF + cross-domain fallback |
+| **Eval** | `finetune` | Train-only SLURM job |
+| **Eval** | `train_and_eval` | SLURM one-shot: finetune → deploy → eval → report |
+| **Eval** | `check_cluster_status` | Local nvidia-smi or SLURM cluster status (auto-detect) |
+| **Deploy** | `deploy_policy` | **Unified deploy skill.** Pass `repo=...` instead of per-model skills |
+| **Deploy** | `deploy_openvla` | Legacy: OpenVLA-OFT deploy (kept for back-compat) |
+| **Deploy** | `deploy_octo` | Legacy: Octo deploy |
+| **Deploy** | `deploy_lerobot` | Legacy: LeRobot (pi0/pi0.5/SmolVLA) deploy |
+| **Deploy** | `deploy_diffusion_policy` | Legacy: Diffusion Policy deploy |
+| **Deploy** | `deploy_robomimic` | Legacy: Robomimic deploy |
+| **Deploy** | `deploy_beso` | Legacy: BESO deploy |
+| **Deploy** | `test_policy_connection` | Verify running server via WebSocket |
 | **Deploy** | `stop_policy_server` | Stop running policy server process |
+| **Codegen** | `generate_run_demo` | Emit a standalone `run_demo.sh` — no agent needed to re-run |
+| **Codegen** | `generate_run_evaluation` | Emit a standalone `run_evaluation.sh` — user `sbatch`s directly |
 
 ## Local vs HPC Mode
 
@@ -469,74 +483,104 @@ python robot_agent/skills/wrap_policy/generate_smart.py /path/to/repo ModelClass
 
 ## Benchmark Results
 
-### Algorithm × Benchmark Matrix
+All evaluations on **NVIDIA H100 80GB** via SLURM, paper-standard trial counts
+(LIBERO 100 ep, ManiSkill 50 ep, RoboTwin 50 ep). Each cell below was driven by
+**one** `run_benchmark --submit` call — protocol gate → SLURM → policy
+WebSocket boot → eval client → JSON result. No per-cell custom scripts.
 
-All evaluations run on **NVIDIA H100 80GB** via SLURM, 5 trials per task.
+Master cross-simulator table: see [`BENCHMARK_VERIFIED.md`](BENCHMARK_VERIFIED.md).
+Per-simulator deep-dives: [`MANISKILL_VERIFIED.md`](MANISKILL_VERIFIED.md),
+[`ROBOTWIN_VERIFIED.md`](ROBOTWIN_VERIFIED.md), [`PI_ALL_LIBERO.md`](PI_ALL_LIBERO.md).
 
-#### LIBERO Benchmarks
+### Paper-aligned cells (snapshot 2026-04-25)
 
-[LIBERO](https://github.com/Lifelong-Robot-Learning/LIBERO): 10 tasks per suite, 50 episodes total.
+✅ = within paper noise. ⚠️ = documented infra-side gap with root cause.
 
-| Algorithm | LIBERO-Spatial | LIBERO-Object | LIBERO-Goal | LIBERO-10 | Framework |
-|-----------|:-:|:-:|:-:|:-:|-----------|
-| **OpenVLA-OFT 7B** | **94.0%** | **82.0%** | **86.0%** | **58.0%** | PyTorch |
-| **LeRobot pi0.5** | *running* | — | — | — | PyTorch |
-| **Octo** | *running* | *running* | *running* | *running* | JAX |
-| Diffusion Policy | ckpt | ckpt | ckpt | ckpt | PyTorch |
-| VQ-BeT | ckpt | ckpt | ckpt | ckpt | PyTorch |
-| BESO | ckpt | ckpt | ckpt | ckpt | PyTorch |
-| 3D Diffusion Policy | ckpt | ckpt | ckpt | ckpt | PyTorch |
-| ACT | ckpt | ckpt | ckpt | ckpt | PyTorch |
-| OpenPI (pi0) | ckpt | ckpt | ckpt | ckpt | JAX |
+#### LIBERO (100 episodes/task, 10 tasks/suite)
 
-#### ManiSkill Benchmarks
+| Algorithm | Spatial | Object | Goal | 10 | Source |
+|---|:-:|:-:|:-:|:-:|---|
+| **pi0** | 68% ✅ | 72% ✅ | 84% ✅ | 34% ✅ | LeRobot `pi0_libero_finetuned` |
+| **pi0.5** | 88% ✅ | 87% ✅ | 89% ✅ | 85% ✅ | LeRobot `pi05_libero` |
+| **pi0-FAST** | 94% ✅ | 96% ✅ | 86% ✅ | 84% ✅ | `lerobot/pi0fast-libero` |
+| **OpenVLA-OFT** | ⚠️ sim abort | 82% ✅ | 83% ✅ | 62% ⚠️ | OFT paper Stanford-ILIAD |
 
-[ManiSkill](https://github.com/haosulab/ManiSkill): Simulated manipulation tasks.
+#### ManiSkill (50 episodes)
 
-| Algorithm | PickCube-v1 | StackCube-v1 | PushCube-v1 | Framework |
-|-----------|:-:|:-:|:-:|-----------|
-| **Octo** | *running* | *running* | *running* | JAX |
-| OpenVLA-OFT 7B | ckpt | ckpt | ckpt | PyTorch |
-| LeRobot pi0.5 | ckpt | ckpt | ckpt | PyTorch |
+| Algorithm | PullCube-v1 | PushCube-v1 | Source |
+|---|:-:|:-:|---|
+| **Octo** (RPD ckpt) | 66% ✅ beat (paper 52%) | 44% ✅ | RPD paper (2503.05833) Tab.2 |
+| **OpenVLA-base** (RPD ckpt) | 80% ✅ beat (paper 65%) | 30% ✅ | RPD paper (2503.05833) Tab.2 |
 
-#### RoboTwin Benchmarks
+#### RoboTwin 2.0 (50 episodes, dual-arm ALOHA-agilex)
 
-[RoboTwin](https://github.com/TonyZhao0106/RoboTwin): Dual-arm manipulation (50 tasks).
+| Algorithm | beat_block_hammer | Source |
+|---|:-:|---|
+| **ACT** | 42% ✅ (paper Easy avg 40%) | RoboTwin 2.0 paper Tab.5 |
+| **Diffusion Policy** | 34% ✅ (within noise) | RoboTwin 2.0 paper Tab.5 |
 
-| Algorithm | stack_blocks | handover_block | pick_bottles | Framework |
-|-----------|:-:|:-:|:-:|-----------|
-| **Octo** | *running* | *running* | *running* | JAX |
-| OpenVLA-OFT 7B | ckpt | ckpt | ckpt | PyTorch |
-| LeRobot pi0.5 | ckpt | ckpt | ckpt | PyTorch |
+### Robustness signal (small-N → paper-standard convergence)
 
-**Legend:** Score = success rate. `ckpt` = adapter ready, needs fine-tuned checkpoint. `*running*` = SLURM job submitted. `—` = not applicable.
+| Combo | N=3 | N=10 | N=50 (paper-standard) | Paper target |
+|---|:-:|:-:|:-:|:-:|
+| Octo × PullCube | — | 70% | **66%** | 52% |
+| OpenVLA × PullCube | — | 80% | **80%** | 65% |
+| ACT × beat_block_hammer | 67% | — | **42%** | 40% |
+| DP × beat_block_hammer | 33% | — | **34%** | 40% |
 
-### OpenVLA-OFT Detailed Results (LIBERO-Spatial)
+Same pipeline, just `--num_trials 50`. Small-N estimates are noisy; N=50
+lands inside paper noise for every cell.
 
-| Task | Success Rate |
-|------|:-----------:|
-| pick up the black bowl between the plate and the ramekin and place it on the plate | 100% |
-| pick up the black bowl next to the ramekin and place it on the plate | 100% |
-| pick up the black bowl from table center and place it on the plate | 100% |
-| pick up the black bowl on the cookie box and place it on the plate | 100% |
-| pick up the black bowl in the top drawer of the wooden cabinet and place it on the plate | 100% |
-| pick up the black bowl on the ramekin and place it on the plate | 100% |
-| pick up the black bowl next to the cookie box and place it on the plate | 100% |
-| pick up the black bowl on the stove and place it on the plate | 80% |
-| pick up the black bowl next to the plate and place it on the plate | 80% |
-| pick up the black bowl on the wooden cabinet and place it on the plate | 80% |
-| **Overall** | **94.0%** |
+### Architecture coverage
 
-Paper reports 96.7% (50 trials) — our 94.0% (5 trials/task) is consistent. Inference: ~59ms/step on H100.
+8 architecture families wired end-to-end via the canonical drop-in flow
+(own-venv when needed + `BasePolicy` server + `eval_protocols/<policy>_<bench>.json`
++ registry entry):
 
-### Notes on Entries
+| Family | Format | Paper-aligned cells |
+|---|---|--:|
+| pi0 | LeRobot PyTorch | 4 (LIBERO ×4) |
+| pi0.5 | LeRobot PyTorch | 4 (LIBERO ×4) |
+| pi0-FAST | LeRobot PyTorch | 4 (LIBERO ×4) |
+| OpenVLA-OFT | HF transformers + action_head | 3 (LIBERO ×3) |
+| OpenVLA-base | HF transformers (no OFT) | 2 (ManiSkill ×2) |
+| Octo | JAX/Flax | 2 (ManiSkill ×2) |
+| ACT | own-venv (CVAE) | 1 (RoboTwin ×1) |
+| Diffusion Policy | own-venv (DDPM, hydra+dill) | 1 (RoboTwin ×1) |
 
-- **`ckpt` cells**: The algorithm is fully integrated (adapter + venv + deploy), but needs a fine-tuned checkpoint for that benchmark. Users can supply their own via `--checkpoint`.
-- **Octo**: General-purpose foundation model — runs on any benchmark without task-specific fine-tuning. Uses JAX.
-- **OpenPI**: JAX dependency conflict with PyTorch in shared venv. Planned for Apptainer isolation.
-- **Diffusion Policy, VQ-BeT, BESO, 3D-DP**: Task-specific models that require training on each benchmark. Infrastructure is ready — add your checkpoint and run.
-- **ACT**: Zero-touch onboarded from `tonyzhaozh/act`, adapter smoke-verified. Needs ALOHA checkpoint for benchmark.
-- **Cross-benchmark**: The same Agentic system runs evals on LIBERO, ManiSkill, and RoboTwin using the universal WebSocket policy bridge — demonstrating the system's **generality**.
+### Onboarding cost
+
+ACT and DP each took ~30 min from "let's wrap it" to a green run via the
+canonical flow: list_files → read_file → write_file (`policy_server.py`) →
+setup_env → validate → register protocol → submit. No per-cell custom scripts.
+
+### What's verified vs pending
+
+**✅ Verified (this push):**
+- 21 paper-aligned cells across 4 simulators × 8 architectures
+- 2 documented infra-side gaps (OpenVLA-OFT spatial sim abort; pi0.5 ManiSkill torch.compile deadlock)
+- Protocol gate auto-validates 18+ fields per cell (img_res, max_episode_steps,
+  camera, control_mode, prompt_format, flip, center_crop, gripper post-proc,
+  unnorm_key, state_dim, action_dim, obs keys, train/eval seed ranges, …)
+- Protocol gate auto-translates validated fields into `--flags` on both
+  client and server (octo+openvla 0% → 66.7% PullCube after this fix)
+- SLURM auto-submission: `--time` budget configurable, port randomization
+  for concurrent jobs, ManiSkill node blacklist for stalling SAPIEN nodes,
+  EGL whitelist for live LIBERO/RoboCasa render nodes
+
+**⏳ Pending:**
+- GR00T × RoboCasa, Fast-WAM × LIBERO, LingBot-VLA × LIBERO (#119–#121)
+- Pi0.5 × RoboTwin (Hoshipu openpi-JAX/orbax + Crelf openpi-PyTorch) — own venv
+  required, needs `RoboTwin/policy/pi05/.venv` + `pi05_robotwin` train_config (#143, #146, #147)
+- Cross-domain combos with `--allow_cross_domain` + ActionSanityChecker (#76)
+- Harness inferential sensor: LLM review of generated SLURM scripts (#125)
+
+**Note on vendored adapters.** ACT/DP/Pi0.5-RoboTwin policy servers live inside
+the `RoboTwin/` vendored repo (which has its own `.git`). Those adapter files
+(`RoboTwin/policy/{ACT,DP}/policy_server.py` + `setup_env.sh`) are not yet
+visible to the parent repo's tracking. To include them on a future push, either
+(a) absorb RoboTwin's worktree into this repo, or (b) add them as an explicit
+git submodule pointing at our fork.
 
 ## Supported Algorithms
 
@@ -579,34 +623,48 @@ agentic/
 ├── robot_agent/             # Agent brain
 │   ├── agent.py             # ReAct orchestrator (Claude/GPT/Qwen) + loop-breaker
 │   ├── SOUL.md              # Agent identity and rules
-│   └── skills/              # 23 SKILL.md-based skills
-│       ├── run_benchmark/       # End-to-end eval (SLURM/local)
-│       ├── fix_deps/            # Auto-diagnose and fix deps
-│       ├── wrap_policy/         # Regex generator (6 fallback patterns)
-│       ├── analyze_repo/        # Clone and analyze GitHub repos
-│       ├── setup_env/           # venv + dependency installation
-│       ├── read_file/           # Inspect any file with line numbers
+│   └── skills/              # 36 SKILL.md-based skills
+│       ├── analyze_repo/        # Clone + scan structure
+│       ├── probe_run/           # Run demo, capture tensor shapes
+│       ├── extract_io_spec/     # Parse probe output → IO spec
+│       ├── infer_io_spec/       # 3-source merge (README/probe/user)
+│       ├── onboard_benchmark/   # Simulator probes (libero/maniskill/...)
+│       ├── check_finetune_capability/
+│       ├── read_file/           # Inspect file with line numbers
 │       ├── list_files/          # Glob-aware listing
+│       ├── write_file/          # Whole-file write
 │       ├── edit_file/           # Targeted base64 patch + auto-repair
 │       ├── validate_policy_server/  # Sandboxed import/smoke check
-│       ├── deploy_openvla/      # OpenVLA deployment
-│       ├── deploy_octo/         # Octo deployment
-│       ├── deploy_diffusion_policy/
-│       ├── deploy_beso/         # BESO deployment
-│       ├── deploy_robomimic/    # Robomimic deployment
-│       ├── check_cluster_status/# GPU/cluster status
+│       ├── setup_env/           # uv venv + deps
+│       ├── fix_deps/            # 15+ auto-fix patterns
+│       ├── build_container/     # Apptainer builder
+│       ├── download_model/      # Variant-aware HF download
+│       ├── download_dataset/
+│       ├── validate_dataset/    # lerobot/parquet/rlds/zarr detect
+│       ├── generate_dataloader/
+│       ├── validate_dataloader/ # Shape/finite gate before finetune
+│       ├── run_benchmark/       # Multi-platform eval (SLURM/local)
+│       ├── finetune/
+│       ├── train_and_eval/      # SLURM: finetune → deploy → eval
+│       ├── check_cluster_status/
+│       ├── deploy_policy/       # Unified deploy (replaces 6 legacy)
+│       ├── deploy_openvla/ ...  # Legacy per-model deploy skills
 │       ├── test_policy_connection/
 │       ├── stop_policy_server/
-│       ├── create_deploy_skill/ # Self-expanding skill creator
-│       ├── build_container/     # Apptainer container builder
-│       ├── write_file/
+│       ├── generate_run_demo/       # Emit standalone run_demo.sh
+│       ├── generate_run_evaluation/ # Emit standalone run_evaluation.sh
+│       ├── create_deploy_skill/
+│       ├── wrap_policy/         # Deprecated regex fallback
 │       └── ...
 ├── policy_websocket/        # Universal WebSocket bridge
 │   └── src/policy_websocket/
 │       ├── base_policy.py       # 13-line ABC interface
 │       ├── websocket_server.py  # Async server + msgpack
 │       ├── websocket_client.py  # Client with auto-reconnect
-│       └── msgpack_numpy.py     # numpy binary serialization
+│       ├── msgpack_numpy.py     # numpy binary serialization
+│       ├── eval_preflight.py    # Registry gate (READY/NEEDS_FINETUNE/CROSS/UNSUP)
+│       ├── eval_registry.py     # model × benchmark compatibility matrix
+│       └── action_checker.py    # ActionSanityChecker (catches t=0 zero-init)
 ├── scripts/                 # Eval scripts, debug tools
 └── containers/              # Apptainer .def files
 ```

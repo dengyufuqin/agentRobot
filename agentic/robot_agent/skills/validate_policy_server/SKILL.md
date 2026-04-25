@@ -66,3 +66,14 @@ def __init__(self, **kwargs):
         return
     # ... real loading code ...
 ```
+
+## Known traps
+
+### websocket JIT-compile timeout kills server on first inference
+**Symptom:**
+`websockets.exceptions.ConnectionClosedError: sent 1011 (internal error) keepalive ping timeout`
+on the first inference for any JAX / torch.compile policy (pi0.5 JIT ~45 min,
+openpi single MM autotune ~266 s).
+**Fix:** Set `ping_interval=None` on the `policy_websocket` client. Bumping
+`ping_timeout` only postpones the problem — compile times are unpredictable.
+[mem:feedback_websocket_jit_timeout]
